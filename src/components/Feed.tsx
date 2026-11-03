@@ -294,15 +294,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onError={(m) => setErr(m)} />
               ) : (
                 <div className="absolute inset-0">
-                  <Img src={detail?.cover || cards[vid]?.cover || ""} eager={Math.abs(i - index) <= 1} />
+                  <Img src={detail?.cover || cards[vid]?.cover || posts[vid]?.cover || ""} eager={Math.abs(i - index) <= 1} />
                   <div className="absolute inset-0 bg-black/25" />
                 </div>
               )}
 
               {/* 图文帖：没有视频就给个正文入口 */}
-              {isActive && kind === "post" && !hasVideo && (
+              {isActive && kind === "post" && !!post && !post.video_url && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center">
-                  <button onClick={() => setPanel("article")}
+                  <button type="button" onClick={() => setPanel("article")}
                     className="flex items-center gap-2 h-11 px-5 rounded-full bg-white/92 text-[#0b0e15] text-[13.5px] font-semibold pressable elev-3">
                     <IFileText size={17} />查看图文详情
                   </button>

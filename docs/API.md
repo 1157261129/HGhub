@@ -387,3 +387,38 @@ reqwest + rustls，统一 UA/Referer/Accept，
 6. 站点偶发 TLS 握手失败（本地 DNS 假 IP / 代理导致），客户端必须重试。
 7. 未登录时 `interaction` 恒为 `{collected:false,liked:false}`，不要当真实状态渲染。
 8. 点赞、收藏、评论的 `ep` 必须放 **query**，放 body 不生效。
+---
+
+## 附：黄果吃瓜（帖子）接口
+
+吃瓜内容不是剧集，走 `/api/posts` 体系，详情里常同时带**视频 + 图文**。
+
+| 用途 | 方法与路径 | 说明 |
+| --- | --- | --- |
+| 列表 | `GET /api/posts?page=1&size=20` | 返回 `{items,pagination}`，字段 `id/title/cover/tags/hot/publish_time` |
+| 详情 | `GET /api/posts/{id}` | 见下方字段表 |
+| 点赞 | `POST /api/posts/{id}/like` / `DELETE` | 需登录 |
+| 收藏 | `POST /api/posts/{id}/collect` / `DELETE` | 需登录 |
+| 评论列表 | `GET /api/posts/{id}/comments?page=1&size=20` | 返回 `{items,pagination}` |
+
+详情 `data` 主要字段：
+
+```jsonc
+{
+  "id": 65,
+  "title": "……",
+  "cover": "https://pic.drleao.cn/...jpeg?auth_key=...",
+  "content": "<p>正文 HTML，内含 <img> 图集</p>",   // 需要清洗后渲染，图片走本地代理
+  "video_url": "https://xxx/videos5/xxx/xxx.m3u8?auth_key=...",  // 部分帖子没有该字段
+  "author": { "id": 156309, "name": "黄果吃瓜侠", "avatar": "...", "is_following": false },
+  "counts": { "like": 240, "comment": 0, "collect": 110, "share": 0, "hot": 53348 },
+  "interaction": { "liked": false, "collected": false },
+  "tags": ["吃瓜", "..."],
+  "publish_time": "2026-08-14 01:07:59"
+}
+```
+
+前端处理约定：
+
+- `video_url` 存在 → 直接进沉浸式播放页播放；
+- `content` 非空 → 右侧栏常驻「图文」入口，正文经 `DOMParser` 清洗后渲染，`<img src>` 改写为 `hg://localhost/img?u=` 走本地代理（避免防盗链 403）。
