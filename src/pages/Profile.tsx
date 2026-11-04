@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, cover, fmt, platform } from "../api";
+import { api, APP_VERSION, cover, fmt, logLine, platform } from "../api";
 import type { Detail, User } from "../types";
 import { useStore } from "../store";
 import { Avatar, Empty, Img, Modal, Toggle } from "../components/ui";
@@ -197,7 +197,7 @@ export default function Profile({ wide }: { wide: boolean }) {
             <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><IInfo size={16} /></span>
             <div className="flex-1">
               <div className="text-[12.5px] text-on">关于 HGhub</div>
-              <div className="text-[10.5px] text-mut">版本 1.0.0 · 开源项目</div>
+              <div className="text-[10.5px] text-mut">版本 {APP_VERSION} · 开源项目</div>
             </div>
             <IChevR size={15} className="text-mut" />
           </button>
@@ -209,9 +209,27 @@ export default function Profile({ wide }: { wide: boolean }) {
             </div>
             <IChevR size={15} className="text-mut" />
           </button>
+          {/* 打不开时先点这里：把 DNS / 代理 / HTTP 结果复制给维护者 */}
+          <button onClick={async () => {
+            try {
+              const text = JSON.stringify(await api.netDiag(), null, 2);
+              logLine(`[net_diag] ${text}`);
+              await navigator.clipboard?.writeText(text);
+              toast("网络诊断结果已复制", "ok");
+            } catch (e) {
+              toast((e as Error).message || "诊断失败", "info");
+            }
+          }} className="w-full flex items-center gap-3 px-3.5 py-3 text-left pressable">
+            <span className="w-8 h-8 rounded-full bg-s3 flex items-center justify-center text-primary"><ILink size={16} /></span>
+            <div className="flex-1">
+              <div className="text-[12.5px] text-on">网络诊断</div>
+              <div className="text-[10.5px] text-mut">检测 DNS / 系统代理 / 官网连通性</div>
+            </div>
+            <IChevR size={15} className="text-mut" />
+          </button>
         </div>
 
-        <div className="text-center text-[10px] text-dim mt-5">HGhub 1.0.0 · {platform === "android" ? "Android" : "Windows"} 客户端</div>
+        <div className="text-center text-[10px] text-dim mt-5">HGhub {APP_VERSION} · {platform === "android" ? "Android" : "Windows"} 客户端</div>
 
         <Modal open={about} onClose={() => setAbout(false)} width={392}>
           <div className="p-5">
@@ -219,7 +237,7 @@ export default function Profile({ wide }: { wide: boolean }) {
               <span className="w-11 h-11 rounded-(--r-sm) brand-grad glow-neon flex items-center justify-center text-on-primary text-[17px] font-black">H</span>
               <div>
                 <div className="text-[16px] font-bold text-on leading-tight">HGhub</div>
-                <div className="text-[11px] text-mut mt-0.5">黄果短剧 · 第三方客户端 v1.0.0</div>
+                <div className="text-[11px] text-mut mt-0.5">黄果短剧 · 第三方客户端 v{APP_VERSION}</div>
               </div>
             </div>
 

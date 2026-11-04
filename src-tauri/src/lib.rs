@@ -33,6 +33,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             api::app_boot,
             api::debug_log,
+            api::net_diag,
             api::api_login,
             api::api_register,
             api::api_logout,

@@ -5,6 +5,9 @@ import type {
 
 /* ── 运行环境 ───────────────────────────────────────────── */
 
+/** 应用版本（构建时由 vite.config.ts 从 package.json 注入） */
+export const APP_VERSION = __APP_VERSION__;
+
 export const isAndroid = /Android/i.test(navigator.userAgent);
 export const platform: "android" | "windows" = isAndroid ? "android" : "windows";
 
@@ -21,11 +24,17 @@ export const playlist = (url: string) => `${LOCAL}/hls?u=${encodeURIComponent(ur
 
 /* ── 调用封装 ───────────────────────────────────────────── */
 
+/** 写一行到应用数据目录 debug.log（用户反馈「打不开」时要的就是它） */
+export const logLine = (msg: string) => invoke("debug_log", { msg }).catch(() => {});
+
 async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
     return (await invoke(cmd, args)) as T;
   } catch (e) {
-    throw new Error(typeof e === "string" ? e : "请求失败，请检查网络");
+    const msg = typeof e === "string" ? e : "请求失败，请检查网络";
+    // 落盘完整错误链（dns error / connection refused / 证书错误…），toast 只显示截断版
+    logLine(`[api] ${cmd} → ${msg}`);
+    throw new Error(msg.length > 140 ? `${msg.slice(0, 140)}…` : msg);
   }
 }
 
@@ -61,6 +70,7 @@ export const api = {
     call<unknown>("api_comment_send", { id, ep, text, replyId: replyId ?? null }),
 
   clearCache: () => invoke<void>("cache_clear"),
+  netDiag: () => invoke<Record<string, unknown>>("net_diag"),
   postLike: (id: number, on: boolean) => invoke<unknown>("api_post_like", { id, on }),
   postCollect: (id: number, on: boolean) => invoke<unknown>("api_post_collect", { id, on }),
   postComments: (id: number, page: number, size: number) => call<CommentPage>("api_post_comments", { id, page, size }),

@@ -47,6 +47,12 @@ pub async fn debug_log(app: tauri::AppHandle, msg: String) -> Result<(), String>
     Ok(())
 }
 
+/// 网络自检：系统代理 / DNS / 连通性快照，用于远程定位「打不开」。
+#[tauri::command]
+pub async fn net_diag() -> Result<Value, String> {
+    Ok(crate::net::diagnose().await)
+}
+
 /* ───────────────────────── 会话 ───────────────────────── */
 
 #[tauri::command]
