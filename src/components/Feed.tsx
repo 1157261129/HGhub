@@ -9,8 +9,8 @@ import { ArticlePanel, CommentsPanel, EpisodesPanel } from "./Panels";
 import { sanitizeHtml } from "../html";
 import { setBackHandler } from "../back";
 import {
-  IBack, IChevronDown, IChevronUp, ICommentF, IExpand, IFileText, IHeart, IHeartF, ILink, IList,
-  IPlayF, IPlus, IStar, IStarF, IVol, IVolMute,
+  IBack, IBoltF, IChevronDown, IChevronUp, IClose, ICommentF, ICompress, IExpand, IFileText, IHeart, IHeartF,
+  ILink, IList, ILockF, IPauseF, IPlayF, IPlus, IStar, IStarF, IVol, IVolMute,
 } from "../icons";
 
 type Props = {
@@ -32,6 +32,7 @@ const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, "
 export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind = "video", active, bottomInset, onBack, onNearEnd }: Props) {
   const store = useStore();
   const { isLiked, isFav, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, muted, setMuted, volume, setVolume, toast, addHistory, user, setLoginOpen } = store;
+  const isDesktop = platform === "windows";
 
   const boxRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<VideoHandle>(null);
@@ -44,6 +45,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
 
   const [time, setTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [vsize, setVsize] = useState({ w: 0, h: 0 });
   const [buffered, setBuffered] = useState(0);
   const [paused, setPaused] = useState(false);
   const [rate, setRate] = useState(1);
@@ -53,14 +55,24 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const [descOpen, setDescOpen] = useState(false);
   const theater = store.theater;
   const setTheater = store.setTheater;
+  const fs = store.fs;
+  const setFs = store.setFs;
   const [fullscreen, setFullscreen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
   /* —— 移动端手势 —— */
   const [holdSpeed, setHoldSpeed] = useState(false);
+  const [speedLock, setSpeedLock] = useState(false);
+  const [lockArmed, setLockArmed] = useState(false);
+  const holdRef = useRef(false);
+  const lockArmedRef = useRef(false);
   const [scrub, setScrub] = useState<{ pct: number; target: number } | null>(null);
   const scrubTarget = useRef<number | null>(null);
+  /* 进度条拖动 */
+  const barRef = useRef<HTMLDivElement>(null);
+  const barScrub = useRef(false);
+  const [barPct, setBarPct] = useState<number | null>(null);
   const gesture = useRef<{
-    x: number; y: number; t: number; timer: number | null;
+    x: number; y: number; startY: number; t: number; timer: number | null;
     mode: "idle" | "hold" | "scrub"; base: number; width: number;
   } | null>(null);
 
@@ -104,6 +116,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const posterUrl = cover(meta.cover, 900);
   const hasVideo = kind === "video" || !!post?.video_url;
   const articleHtml = kind === "post" && !hasVideo ? sanitizeHtml(post?.content || "") : "";
+
+  /* 倍速：长按 / 锁定 → 2.0x，否则用基准倍速 */
+  const effRate = holdSpeed || speedLock ? 2 : rate;
+  /* 进度条显示百分比（拖动时用拖动值） */
+  const barProgress = barPct ?? (duration ? time / duration : 0);
+  /* 沉浸全屏 + 横屏视频 → 舞台旋转 90°，看起来就是横屏 */
+  const rotated = !isDesktop && fs && vsize.w > vsize.h && vsize.h > 0;
 
   /* 滚动定位 */
   const onScroll = useCallback(() => {
@@ -177,11 +196,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 切换条目/集数时重置播放状态 */
   useEffect(() => {
     setTime(0); setDuration(0); setBuffered(0); setErr(""); setWaiting(true); setPaused(false); setDescOpen(false);
+    setVsize({ w: 0, h: 0 });
   }, [playKey]);
 
   /* 音量/静音同步 */
   useEffect(() => { videoRef.current?.mute(muted); }, [muted]);
   useEffect(() => { videoRef.current?.volume(volume); }, [volume]);
+  /* 倍速同步（长按 2x / 锁定 2x / 基准倍速） */
+  useEffect(() => { videoRef.current?.rate(effRate); }, [effRate, playKey]);
 
   /* 非激活时暂停 */
   useEffect(() => { if (!active) videoRef.current?.pause(); }, [active]);
@@ -234,22 +256,25 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     else el.requestFullscreen().catch(() => {});
   };
 
-  /* —— 长按 2x / 横拖定位 / 单击暂停 —— */
+  /* —— 长按 2x（上滑锁定） / 横拖定位 / 单击暂停 —— */
   const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (isDesktop) return;
     const el = e.currentTarget;
     const width = el.clientWidth || 1;
     try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
     const g = {
-      x: e.clientX, y: e.clientY, t: Date.now(), base: time, width,
-      mode: "idle" as const,
+      x: e.clientX, y: e.clientY, startY: e.clientY, t: Date.now(), base: time, width,
+      mode: "idle" as "idle" | "hold" | "scrub",
       timer: window.setTimeout(() => {
         const cur = gesture.current;
         if (!cur || cur.mode !== "idle") return;
         cur.mode = "hold";
+        holdRef.current = true;
         setHoldSpeed(true);
-        videoRef.current?.rate(2);
-      }, 380),
+        setLockArmed(false);
+        lockArmedRef.current = false;
+        try { navigator.vibrate?.(25); } catch { /* ignore */ }
+      }, 380) as unknown as number,
     };
     gesture.current = g;
   };
@@ -259,6 +284,16 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (!g || isDesktop) return;
     const dx = e.clientX - g.x;
     const dy = e.clientY - g.y;
+
+    /* 长按中：上滑 64px 进入「松开即锁定」 */
+    if (g.mode === "hold") {
+      const armed = g.startY - e.clientY > 64;
+      if (armed !== lockArmedRef.current) {
+        lockArmedRef.current = armed;
+        setLockArmed(armed);
+      }
+      return;
+    }
 
     if (g.mode === "idle") {
       if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
@@ -287,8 +322,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (g.timer) window.clearTimeout(g.timer);
 
     if (g.mode === "hold") {
+      holdRef.current = false;
       setHoldSpeed(false);
-      videoRef.current?.rate(rate);
+      if (lockArmedRef.current) {
+        setSpeedLock(true);
+        toast("已锁定 2.0x 倍速 · 点顶部标签解除", "info");
+      }
+      lockArmedRef.current = false;
+      setLockArmed(false);
       return;
     }
     if (g.mode === "scrub") {
@@ -300,6 +341,56 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
       return;
     }
     if (Date.now() - g.t < 260) videoRef.current?.toggle();
+  };
+
+  /* 长按倍速期间禁止原生滚动，否则上滑会被列表吃掉、锁不住倍速 */
+  useEffect(() => {
+    if (isDesktop) return undefined;
+    const el = boxRef.current;
+    if (!el) return undefined;
+    const fn = (e: TouchEvent) => { if (holdRef.current) e.preventDefault(); };
+    el.addEventListener("touchmove", fn, { passive: false });
+    return () => el.removeEventListener("touchmove", fn);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDesktop, videoIds.length]);
+
+  /* —— 进度条拖动（旋转舞台下按 Y 轴换算） —— */
+  const barPctAt = (clientX: number, clientY: number) => {
+    const r = barRef.current?.getBoundingClientRect();
+    if (!r) return null;
+    const span = rotated ? r.height : r.width;
+    if (!span) return null;
+    const raw = rotated ? (clientY - r.top) / span : (clientX - r.left) / span;
+    return Math.max(0, Math.min(1, raw));
+  };
+  const barSeekTo = (clientX: number, clientY: number) => {
+    const pct = barPctAt(clientX, clientY);
+    if (pct == null) return null;
+    setBarPct(pct);
+    return pct;
+  };
+  const onBarDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    barScrub.current = true;
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    barSeekTo(e.clientX, e.clientY);
+  };
+  const onBarMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!barScrub.current) return;
+    e.stopPropagation();
+    barSeekTo(e.clientX, e.clientY);
+  };
+  const onBarUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!barScrub.current) return;
+    barScrub.current = false;
+    e.stopPropagation();
+    const pct = barPctAt(e.clientX, e.clientY);
+    if (pct != null && duration) {
+      const target = pct * duration;
+      videoRef.current?.seek(target);
+      setTime(target);
+    }
+    setBarPct(null);
   };
 
   const togglePip = async () => {
@@ -350,10 +441,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     return <div className="absolute inset-0 bg-black flex items-center justify-center"><div className="w-9 h-9 spinner" /></div>;
   }
 
-  const isDesktop = platform === "windows";
-
   return (
-    <div className={`absolute inset-0 overflow-hidden bg-black player-root ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""}`}>
+    <div className={`absolute inset-0 overflow-hidden bg-black player-root ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${rotated ? "fs-landscape" : ""}`}>
       {/* 氛围背景 */}
       <div className="absolute inset-0 scale-110 blur-3xl opacity-25 pointer-events-none">
         {posterUrl && <img src={posterUrl} alt="" className="w-full h-full object-cover" />}
@@ -370,9 +459,11 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay muted={muted}
+                  fit={isDesktop ? "contain" : "cover"}
                   onClick={() => { if (isDesktop) videoRef.current?.toggle(); }}
                   onTime={setTime}
                   onDuration={setDuration}
+                  onSize={(w, h) => setVsize({ w, h })}
                   onPlaying={() => { setPaused(false); setWaiting(false); }}
                   onPause={() => setPaused(true)}
                   onWaiting={() => setWaiting(true)}
@@ -401,7 +492,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 style={{ background: "linear-gradient(0deg, rgba(8,11,15,.86) 0, rgba(11,14,20,.18) 26%, transparent 48%)" }} />
 
               {/* 顶部 */}
-              {mode === "context" ? (
+              {!fs && mode === "context" ? (
                 isDesktop ? (
                   <div className="desktop-context-header">
                     <button onClick={onBack} aria-label="返回"><IBack size={17} /></button>
@@ -418,15 +509,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                     </button>
                   </div>
                 )
-              ) : isDesktop ? null : (
-                <div className="absolute inset-x-0 z-20 flex items-center px-3 pointer-events-none" style={{ top: "calc(var(--sat, 0px) + 44px)" }}>
-                  <button onClick={() => setMuted((m) => !m)} className="pointer-events-auto w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white/90 pressable elev-1">
-                    {muted ? <IVolMute size={17} /> : <IVol size={17} />}
-                  </button>
-                </div>
-              )}
+              ) : null}
 
               {/* 右侧操作栏 */}
+              {!fs && (
               <div className={`absolute z-20 flex flex-col items-center ${isDesktop ? "desktop-social" : "right-3"}`}
                 style={isDesktop ? undefined : { bottom: `calc(var(--sab, 0px) + ${bottomInset + 104}px)` }}>
                 {isDesktop && (
@@ -486,51 +572,36 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   <span className="text-[10.5px] text-white/90">分享</span>
                 </button>
               </div>
+              )}
 
-              {/* 左下信息 */}
-              <div className={isDesktop ? "desktop-video-meta" : "absolute left-4 right-20 z-20"}
-                style={isDesktop ? undefined : { bottom: `calc(var(--sab, 0px) + ${bottomInset + 26}px)` }}>
+              {/* 左下信息：整体下移紧贴进度条，去掉标签/评分行避免挤占画面 */}
+              {!fs && (
+              <div className={isDesktop ? "desktop-video-meta" : "absolute left-3.5 right-[76px] z-20"}
+                style={isDesktop ? undefined : { bottom: `calc(var(--sab, 0px) + ${bottomInset + 22}px)` }}>
                 <div className="flex items-center gap-2">
-                  <Avatar size={30} name={meta.author} hue={220} />
-                  <span className="text-[13px] font-semibold text-white tsh">{meta.author}</span>
-                  <button onClick={onFollow}
-                    className={`ml-1 flex items-center gap-1 h-6 px-2.5 rounded-full text-[11px] font-semibold pressable ${store.follows.includes(meta.authorId) ? "bg-white/12 text-white/70" : "bg-white text-[#0b0e15]"}`}>
-                    {store.follows.includes(meta.authorId) ? "已关注" : "关注"}
-                  </button>
+                  <span className="text-[15px] font-bold text-white tsh truncate">@{meta.author}</span>
                   {episodes.length > 0 && (
-                    <span className="ml-1 px-2 h-6 rounded-full bg-white/12 text-[10.5px] text-white/80 flex items-center">
-                      第 {curEp} / {episodes.length} 集
+                    <span className="shrink-0 px-1.5 py-px rounded-md bg-white/15 text-[10px] font-bold text-white">
+                      第 {curEp}/{episodes.length} 集
                     </span>
+                  )}
+                  {!!meta.score && (
+                    <span className="shrink-0 text-[11px] font-bold text-amber tsh">{meta.score.toFixed(1)} 分</span>
                   )}
                 </div>
 
-                <p className="text-[14px] font-bold text-white mt-2 leading-snug clamp-2 tsh">{meta.title}</p>
+                <p className="mt-1 text-[13.5px] leading-snug text-white/95 tsh clamp-2">{meta.title}</p>
 
-                {/* 描述（可展开） */}
-                <button onClick={() => setDescOpen((v) => !v)} className="mt-1.5 text-left w-full pressable group">
+                {/* 描述（单行，点开展开） */}
+                <button onClick={() => setDescOpen((v) => !v)} className="mt-1 text-left w-full pressable group">
                   <p className={`text-[11.5px] leading-relaxed text-white/62 ${descOpen ? "" : "clamp-1"}`}>
                     {meta.desc || "暂无简介"}
                   </p>
                   <span className="text-[10.5px] text-primary/90 font-semibold">{descOpen ? "收起" : "展开简介"}</span>
                 </button>
-
-                <div className="flex flex-wrap gap-1.5 mt-2">
-                  {meta.tags.slice(0, 4).map((t) => (
-                    <span key={t} className="px-2 py-0.5 rounded-full bg-white/12 text-[10px] text-white/85">#{t}</span>
-                  ))}
-                  {meta.score ? <span className="px-2 py-0.5 rounded-full bg-primary/90 text-[10px] font-bold text-on-primary">{meta.score.toFixed(1)} 分</span> : null}
-                </div>
               </div>
-
-
-              {/* 长按倍速提示 */}
-              {!isDesktop && holdSpeed && (
-                <div className="absolute inset-x-0 z-20 flex justify-center pointer-events-none" style={{ top: "38%" }}>
-                  <span className="flex items-center gap-1.5 px-3 h-8 rounded-full bg-black/60 text-white text-[12px] font-semibold backdrop-blur-md">
-                    <IPlayF size={13} />2.0x 快进中
-                  </span>
-                </div>
               )}
+
 
               {/* 横拖定位浮层 */}
               {!isDesktop && scrub && (
@@ -592,22 +663,85 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         />
       )}
 
-      {/* 移动端进度条 */}
+      {/* 移动端：倍速状态 / 锁定提示 */}
+      {!isDesktop && (holdSpeed || speedLock || rate !== 1) && (
+        <button
+          onClick={() => {
+            if (speedLock) { setSpeedLock(false); toast("已解除倍速锁定", "info"); }
+            else if (rate !== 1 && !holdSpeed) setRate(1);
+          }}
+          className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3.5 h-8 rounded-full backdrop-blur-md text-[12px] font-bold elev-2 pressable ${speedLock ? "bg-primary text-on-primary" : "bg-black/45 text-amber"}`}
+          style={{ top: "calc(var(--sat, 0px) + 54px)" }}>
+          <IBoltF size={13} />
+          {effRate}x {speedLock ? "已锁定 · 点按解除" : holdSpeed ? "倍速中 · 松开恢复" : "倍速"}
+        </button>
+      )}
+      {!isDesktop && holdSpeed && (
+        <div
+          className={`absolute left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 px-4 h-10 rounded-xl backdrop-blur-md elev-2 transition-all duration-200 ${lockArmed ? "bg-primary text-on-primary scale-110" : "bg-black/50 text-white/85"}`}
+          style={{ top: "38%" }}>
+          <ILockF size={16} />
+          <span className="text-[12.5px] font-bold">{lockArmed ? "松开锁定 2.0x" : "上滑到此锁定倍速"}</span>
+        </div>
+      )}
+
+      {/* 移动端进度条：22px 热区，可拖动 */}
       {!isDesktop && (
-        <div className="absolute inset-x-0 z-20 px-0" style={{ bottom: bottomInset - 4 }}>
-          <div className="h-[2.5px] bg-white/18">
-            <div className="h-full bg-white/90" style={{ width: `${duration ? (time / duration) * 100 : 0}%` }} />
+        <div ref={barRef} className="absolute inset-x-0 z-30"
+          style={{ bottom: fs ? "calc(var(--sab, 0px) + 52px)" : bottomInset - 2, height: 22, touchAction: "none" }}
+          onPointerDown={onBarDown} onPointerMove={onBarMove} onPointerUp={onBarUp} onPointerCancel={onBarUp}>
+          <div className={`absolute inset-x-0 bottom-[6px] transition-all duration-150 ${barPct !== null || fs ? "h-[5px]" : "h-[2.5px]"} bg-white/20`}>
+            <div className="h-full relative"
+              style={{ width: `${barProgress * 100}%`, background: barPct !== null ? "var(--p-primary)" : "rgba(255,255,255,.92)", transition: barPct !== null ? "none" : "width .25s linear" }}>
+              <span className="absolute right-[-5px] top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-white elev-1"
+                style={{ boxShadow: "0 0 10px var(--p-glow)" }} />
+            </div>
           </div>
+          {barPct !== null && (
+            <div className="absolute left-1/2 -translate-x-1/2 bottom-7 px-3.5 py-1.5 rounded-lg bg-black/70 backdrop-blur-md text-[15px] font-bold text-white tabular-nums">
+              {fmtTime(barPct * (duration || 0))} <span className="text-white/45 text-[12px] font-medium">/ {fmtTime(duration)}</span>
+            </div>
+          )}
         </div>
       )}
 
       {/* 移动端：全屏入口 */}
-      {!isDesktop && (
-        <button onClick={toggleFull} aria-label="全屏"
+      {!isDesktop && !fs && (
+        <button onClick={() => setFs(true)} aria-label="全屏"
           className="absolute right-4 z-20 w-9 h-9 rounded-full bg-black/45 flex items-center justify-center text-white/90 pressable elev-1"
           style={{ bottom: bottomInset + 56 }}>
           <IExpand size={17} />
         </button>
+      )}
+
+      {/* 移动端：沉浸全屏（安卓 WebView 不支持 Fullscreen API，改用应用内沉浸层） */}
+      {!isDesktop && fs && (
+        <>
+          <button onClick={() => setFs(false)} aria-label="退出全屏"
+            className="absolute right-3 z-40 w-9 h-9 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center text-white pressable elev-1"
+            style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
+            <ICompress size={18} />
+          </button>
+          <div className="absolute inset-x-0 z-40 flex items-center gap-3 px-4"
+            style={{ bottom: "calc(var(--sab, 0px) + 10px)" }}>
+            <button onClick={() => videoRef.current?.toggle()}
+              className="shrink-0 w-9 h-9 rounded-full bg-black/45 flex items-center justify-center text-white pressable">
+              {paused ? <IPlayF size={18} /> : <IPauseF size={17} />}
+            </button>
+            <span className="shrink-0 text-[11.5px] font-semibold text-white/85 tabular-nums">{fmtTime(time)}</span>
+            <button
+              onClick={() => {
+                if (speedLock) { setSpeedLock(false); return; }
+                const seq = [1, 1.25, 1.5, 2];
+                const i = seq.indexOf(rate);
+                setRate(seq[(i + 1) % seq.length]);
+              }}
+              className={`ml-auto shrink-0 flex items-center gap-1 px-2.5 h-8 rounded-full text-[12px] font-bold pressable ${effRate !== 1 ? "bg-primary text-on-primary" : "bg-black/45 text-white/85"}`}>
+              <IBoltF size={12} />{effRate}x
+            </button>
+            <span className="shrink-0 text-[11.5px] text-white/50 tabular-nums">{fmtTime(duration)}</span>
+          </div>
+        </>
       )}
 
       {/* 选集 / 评论：桌面停靠在右侧（画面让位），移动端底部弹层 */}

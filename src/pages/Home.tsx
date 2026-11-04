@@ -6,7 +6,7 @@ import { useStore } from "../store";
 import { ISearch, IVol, IVolMute } from "../icons";
 
 export default function Home({ active, bottomInset }: { active: boolean; bottomInset: number }) {
-  const { muted, setMuted, setTab, toast } = useStore();
+  const { muted, setMuted, setTab, toast, fs } = useStore();
   const [items, setItems] = useState<VideoCard[]>([]);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -48,16 +48,18 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
       )}
 
       {/* 移动端：静音 + 搜索 */}
-      {platform !== "windows" && (
-        <div className="absolute inset-x-0 z-20 flex items-center px-3 pointer-events-none" style={{ top: "calc(var(--sat, 0px) + 44px)" }}>
-          <button onClick={() => setMuted((m) => !m)}
-            className="pointer-events-auto w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white/90 pressable elev-1">
-            {muted ? <IVolMute size={17} /> : <IVol size={17} />}
-          </button>
-          <button onClick={() => setTab("search")}
-            className="pointer-events-auto ml-auto w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white/90 pressable elev-1">
-            <ISearch size={18} />
-          </button>
+      {platform !== "windows" && !fs && (
+        <div className="absolute inset-x-0 z-20 flex items-center px-3 pointer-events-none" style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
+          <div className="ml-auto flex items-center gap-2">
+            <button onClick={() => setMuted((m) => !m)}
+              className="pointer-events-auto w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white/90 pressable elev-1">
+              {muted ? <IVolMute size={17} /> : <IVol size={17} />}
+            </button>
+            <button onClick={() => setTab("search")}
+              className="pointer-events-auto w-9 h-9 rounded-full bg-black/40 flex items-center justify-center text-white/90 pressable elev-1">
+              <ISearch size={18} />
+            </button>
+          </div>
         </div>
       )}
     </div>

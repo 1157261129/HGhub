@@ -234,13 +234,16 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 .win-account-copy small { font-size: 10.5px; color: var(--p-dim); }
 .win-sidebar-version { font-size: 10px; color: var(--p-dim); padding: 2px 10px 0; }
 
-.win-main {
+/* 仅桌面无边框窗口：右侧/底部留 12px 呼吸位 + 圆角。
+   安卓必须不加，否则内容比屏幕小一圈（右侧、底部各 12px 露 canvas 底）。 */
+.plat-windows .win-main {
   margin: 0 12px 12px 0;
   border-radius: 13px;
   background: var(--p-bg);
   overflow: hidden;
   isolation: isolate;
 }
+.plat-android .win-main { background: var(--p-bg); overflow: hidden; }
 .win-page-in { animation: kf-page-in .26s cubic-bezier(.2,0,0,1) both; }
 .win-page-out { animation: kf-page-out .2s ease-in both; }
 
@@ -438,6 +441,15 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 }
 .player-surface .player-root,
 .player-root { background: #15181d; }
+
+/* —— 安卓沉浸全屏：横屏视频把舞台旋转 90°（不依赖系统旋转） —— */
+.fs-landscape {
+  position: absolute;
+  top: 50%; left: 50%; right: auto; bottom: auto;
+  width: 100vh; height: 100vw;
+  transform: translate(-50%, -50%) rotate(90deg);
+  transform-origin: center center;
+}
 
 .desktop-dock-panel {
   position: absolute; top: 0; right: 0; bottom: 0; width: 0; z-index: 40;

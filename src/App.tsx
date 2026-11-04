@@ -15,28 +15,31 @@ import { WindowsRail, WindowsTitleBar } from "./components/WindowsChrome";
 import ResizeHandles from "./components/ResizeHandles";
 import { IGrid, IGridF, IHome, IHomeF, ISearch, IUser, IUserF, Logo } from "./icons";
 
-/* ============ 底部标签栏（Android） ============ */
+/* ============ 底部标签栏（Android）—— 细瘦纯文字、低侵入 ============ */
 function TabBar() {
   const { tab, setTab } = useStore();
-  const items: { k: Tab; label: string; Ic: typeof IHome; IcF: typeof IHomeF }[] = [
-    { k: "home", label: "首页", Ic: IHome, IcF: IHomeF },
-    { k: "search", label: "搜索", Ic: ISearch, IcF: ISearch },
-    { k: "category", label: "分类", Ic: IGrid, IcF: IGridF },
-    { k: "profile", label: "我的", Ic: IUser, IcF: IUserF },
+  const items: { k: Tab; label: string }[] = [
+    { k: "home", label: "首页" },
+    { k: "search", label: "搜索" },
+    { k: "category", label: "分类" },
+    { k: "profile", label: "我的" },
   ];
   const onVideo = tab === "home";
   return (
-    <nav className={`absolute bottom-0 inset-x-0 z-30 backdrop-blur-xl ${onVideo ? "bg-black/35" : "bg-s2/95 elev-up"}`}
+    <nav className={`absolute bottom-0 inset-x-0 z-30 ${onVideo ? "" : "bg-s2/95 elev-up"}`}
       style={{ paddingBottom: "var(--sab, 0px)" }}>
-      <div className="h-[64px] flex items-center px-2">
-        {items.map(({ k, label, Ic, IcF }) => {
+      <div className="h-[42px] flex items-center px-1">
+        {items.map(({ k, label }) => {
           const on = tab === k;
           return (
-            <button key={k} onClick={() => setTab(k)} className="flex-1 flex flex-col items-center justify-center gap-1 pressable">
-              <span className={`w-16 h-8 rounded-full flex items-center justify-center transition-colors duration-200 ${on ? (onVideo ? "bg-white/18" : "tonal") : ""}`}>
-                {on ? <IcF size={22} className={onVideo ? "text-white" : "text-on-sec"} /> : <Ic size={22} className={onVideo ? "text-white/70" : "text-mut"} />}
+            <button key={k} onClick={() => setTab(k)} className="flex-1 h-full flex flex-col items-center justify-center pressable">
+              <span className={`text-[13px] leading-none transition-colors duration-200 ${on
+                ? (onVideo ? "font-bold text-white" : "font-bold text-on")
+                : (onVideo ? "font-normal text-white/55" : "font-normal text-mut")}`}
+                style={onVideo ? { textShadow: "0 1px 8px rgba(0,0,0,.7)" } : undefined}>
+                {label}
               </span>
-              <span className={`text-[11px] leading-none ${on ? (onVideo ? "font-semibold text-white" : "font-semibold text-on") : onVideo ? "text-white/70" : "text-mut"}`}>{label}</span>
+              <span className={`mt-[5px] w-[3px] h-[3px] rounded-full transition-opacity duration-200 ${on ? (onVideo ? "bg-white" : "bg-primary") : "opacity-0"}`} />
             </button>
           );
         })}
@@ -64,7 +67,7 @@ function StackPage({ page, onBack, wide, top, bottomInset }: {
 
 /* ============ 应用主体 ============ */
 function AppBody() {
-  const { platform, tab, setTab, stack, pop, loginOpen, setLoginOpen } = useStore();
+  const { platform, tab, setTab, stack, pop, loginOpen, setLoginOpen, fs } = useStore();
   const mainRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(platform === "windows");
   const [collapsed, setCollapsed] = useState(false);
@@ -99,7 +102,7 @@ function AppBody() {
 
   const vis = (k: Tab) => (tab === k ? "absolute inset-0" : "absolute inset-0 invisible pointer-events-none");
   const pageActive = stack.length === 0 && !loginOpen;
-  const bottomInset = platform === "android" ? 82 : 14;
+  const bottomInset = platform === "android" ? (fs ? 0 : 48) : 14;
 
   return (
     <div className={`absolute inset-0 flex bg-canvas plat-${platform}`}>
@@ -116,7 +119,7 @@ function AppBody() {
           </div>
         ))}
 
-        {platform === "android" && <TabBar />}
+        {platform === "android" && !fs && <TabBar />}
       </div>
     </div>
   );
@@ -204,7 +207,34 @@ function MobileShell() {
 
 /* ============ 入口 ============ */
 export default function App() {
-  const { platform, loginOpen, setLoginOpen } = useStore();
+  const { platform, loginOpen, setLoginOpen, tab, setTab, stack, pop, fs, setFs } = useStore();
+
+  /* —— 安卓硬件返回键 ——
+     层级：全屏 → 面板/弹层 → 登录框 → 页面栈 → 回首页 → 退出应用。
+     不注册这个监听，Tauri 会直接 webView.goBack() 或退出，表现就是「任意页面返回都回桌面」。 */
+  const backRef = useRef<() => void>(() => {});
+  backRef.current = () => {
+    if (fs) { setFs(false); return; }                        // 沉浸全屏
+    if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+    if (runBack()) return;                                  // 播放器的选集/评论/图文面板
+    if (loginOpen) { setLoginOpen(false); return; }
+    if (stack.length) { pop(); return; }
+    if (tab !== "home") { setTab("home"); return; }
+    invoke("plugin:app|exit", { code: 0 }).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (platform !== "android") return undefined;
+    let disposed = false;
+    let handle: { unregister: () => Promise<void> } | null = null;
+    addPluginListener("app", "back-button", () => backRef.current())
+      .then((l) => { if (disposed) l.unregister().catch(() => {}); else handle = l; })
+      .catch(() => { /* 非安卓宿主忽略 */ });
+    return () => {
+      disposed = true;
+      handle?.unregister().catch(() => {});
+    };
+  }, [platform]);
 
   useEffect(() => {
     const prevent = (e: Event) => e.preventDefault();

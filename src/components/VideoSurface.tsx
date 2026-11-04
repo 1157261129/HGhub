@@ -22,6 +22,7 @@ type Props = {
   fit?: "contain" | "cover";
   onTime?: (t: number) => void;
   onDuration?: (d: number) => void;
+  onSize?: (w: number, h: number) => void;
   onPlaying?: () => void;
   onPause?: () => void;
   onWaiting?: () => void;
@@ -34,7 +35,7 @@ type Props = {
 /** 只负责「播」：hls.js + video 元素，控制条由外层渲染。 */
 const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
   { src, poster, autoPlay = true, muted = false, loop = false, fit = "contain",
-    onTime, onDuration, onPlaying, onPause, onWaiting, onEnded, onError, onClick, className = "" },
+    onTime, onDuration, onSize, onPlaying, onPause, onWaiting, onEnded, onError, onClick, className = "" },
   ref,
 ) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -112,7 +113,11 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
       style={{ opacity: ready ? 1 : 0, transition: "opacity .35s" }}
       onLoadedData={() => setReady(true)}
       onTimeUpdate={(e) => onTime?.((e.target as HTMLVideoElement).currentTime)}
-      onLoadedMetadata={(e) => onDuration?.((e.target as HTMLVideoElement).duration || 0)}
+      onLoadedMetadata={(e) => {
+        const v = e.target as HTMLVideoElement;
+        onDuration?.(v.duration || 0);
+        onSize?.(v.videoWidth || 0, v.videoHeight || 0);
+      }}
       onPlay={() => onPlaying?.()}
       onPause={() => onPause?.()}
       onWaiting={() => onWaiting?.()}
