@@ -24,7 +24,7 @@ pub fn run() {
             let query = uri.query().unwrap_or("").to_string();
             // 自定义协议在 Windows 上是 http://<scheme>.localhost，Android 上是 https://
             // 注意：请求 URI 的 scheme 是 "hg"，不能拿来拼子资源地址，否则 WebView 无法解析。
-            let scheme = if cfg!(target_os = "android") { "https" } else { "http" }.to_string();
+            let scheme = "http".to_string();
             tauri::async_runtime::spawn(async move {
                 let resp = media::handle(&path, &query, &scheme).await;
                 responder.respond(resp);

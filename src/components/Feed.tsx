@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, cover, fmt, mediaUrl, platform } from "../api";
+import { api, cover, fmt, fmtTime, mediaUrl, platform } from "../api";
 import type { Detail, Episode, Post, VideoCard } from "../types";
 import { useStore } from "../store";
 import { Avatar, Img, Sheet } from "./ui";
@@ -7,8 +7,9 @@ import VideoSurface, { type VideoHandle } from "./VideoSurface";
 import PlayerControls from "./PlayerControls";
 import { ArticlePanel, CommentsPanel, EpisodesPanel } from "./Panels";
 import { sanitizeHtml } from "../html";
+import { setBackHandler } from "../back";
 import {
-  IBack, IChevronDown, IChevronUp, ICommentF, IFileText, IHeart, IHeartF, ILink, IList,
+  IBack, IChevronDown, IChevronUp, ICommentF, IExpand, IFileText, IHeart, IHeartF, ILink, IList,
   IPlayF, IPlus, IStar, IStarF, IVol, IVolMute,
 } from "../icons";
 
@@ -54,6 +55,14 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const setTheater = store.setTheater;
   const [fullscreen, setFullscreen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
+  /* —— 移动端手势 —— */
+  const [holdSpeed, setHoldSpeed] = useState(false);
+  const [scrub, setScrub] = useState<{ pct: number; target: number } | null>(null);
+  const scrubTarget = useRef<number | null>(null);
+  const gesture = useRef<{
+    x: number; y: number; t: number; timer: number | null;
+    mode: "idle" | "hold" | "scrub"; base: number; width: number;
+  } | null>(null);
 
   const curId = videoIds[index];
   const detail = details[curId];
@@ -205,6 +214,13 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, panel, time, index]);
 
+  /* 安卓返回键：面板打开时先关面板 */
+  useEffect(() => {
+    if (!panel) { setBackHandler(null); return undefined; }
+    setBackHandler(() => { setPanel(null); return true; });
+    return () => setBackHandler(null);
+  }, [panel]);
+
   useEffect(() => {
     const onFs = () => setFullscreen(!!document.fullscreenElement);
     document.addEventListener("fullscreenchange", onFs);
@@ -216,6 +232,74 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
     if (!el) return;
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     else el.requestFullscreen().catch(() => {});
+  };
+
+  /* —— 长按 2x / 横拖定位 / 单击暂停 —— */
+  const onDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDesktop) return;
+    const el = e.currentTarget;
+    const width = el.clientWidth || 1;
+    try { el.setPointerCapture(e.pointerId); } catch { /* ignore */ }
+    const g = {
+      x: e.clientX, y: e.clientY, t: Date.now(), base: time, width,
+      mode: "idle" as const,
+      timer: window.setTimeout(() => {
+        const cur = gesture.current;
+        if (!cur || cur.mode !== "idle") return;
+        cur.mode = "hold";
+        setHoldSpeed(true);
+        videoRef.current?.rate(2);
+      }, 380),
+    };
+    gesture.current = g;
+  };
+
+  const onMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const g = gesture.current;
+    if (!g || isDesktop) return;
+    const dx = e.clientX - g.x;
+    const dy = e.clientY - g.y;
+
+    if (g.mode === "idle") {
+      if (Math.abs(dx) > 14 && Math.abs(dx) > Math.abs(dy)) {
+        if (g.timer) window.clearTimeout(g.timer);
+        g.mode = "scrub";
+        videoRef.current?.pause();
+      } else if (Math.abs(dy) > 14) {
+        if (g.timer) window.clearTimeout(g.timer);
+      }
+      return;
+    }
+
+    if (g.mode === "scrub") {
+      const total = duration || 0;
+      if (!total) return;
+      const target = Math.max(0, Math.min(total, g.base + (dx / g.width) * total));
+      scrubTarget.current = target;
+      setScrub({ pct: (target / total) * 100, target });
+    }
+  };
+
+  const onUp = () => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    if (g.timer) window.clearTimeout(g.timer);
+
+    if (g.mode === "hold") {
+      setHoldSpeed(false);
+      videoRef.current?.rate(rate);
+      return;
+    }
+    if (g.mode === "scrub") {
+      const target = scrubTarget.current;
+      if (target != null) videoRef.current?.seek(target);
+      setScrub(null);
+      scrubTarget.current = null;
+      if (!paused) videoRef.current?.play();
+      return;
+    }
+    if (Date.now() - g.t < 260) videoRef.current?.toggle();
   };
 
   const togglePip = async () => {
@@ -283,8 +367,10 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           return (
             <section key={vid} className="relative w-full h-full snap-start overflow-hidden">
               {isActive && playUrl ? (
+                <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
+                  onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay muted={muted}
-                  onClick={() => videoRef.current?.toggle()}
+                  onClick={() => { if (isDesktop) videoRef.current?.toggle(); }}
                   onTime={setTime}
                   onDuration={setDuration}
                   onPlaying={() => { setPaused(false); setWaiting(false); }}
@@ -292,6 +378,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                   onWaiting={() => setWaiting(true)}
                   onEnded={() => { const next = episodes.find((e) => e.ep_num === curEp + 1); if (next) pickEp(next.ep_num); }}
                   onError={(m) => setErr(m)} />
+                </div>
               ) : (
                 <div className="absolute inset-0">
                   <Img src={detail?.cover || cards[vid]?.cover || posts[vid]?.cover || ""} eager={Math.abs(i - index) <= 1} />
@@ -436,6 +523,26 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               </div>
 
 
+              {/* 长按倍速提示 */}
+              {!isDesktop && holdSpeed && (
+                <div className="absolute inset-x-0 z-20 flex justify-center pointer-events-none" style={{ top: "38%" }}>
+                  <span className="flex items-center gap-1.5 px-3 h-8 rounded-full bg-black/60 text-white text-[12px] font-semibold backdrop-blur-md">
+                    <IPlayF size={13} />2.0x 快进中
+                  </span>
+                </div>
+              )}
+
+              {/* 横拖定位浮层 */}
+              {!isDesktop && scrub && (
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center pointer-events-none bg-black/25">
+                  <span className="text-[26px] font-bold text-white tabular-nums tsh">{fmtTime(scrub.target)}</span>
+                  <span className="text-[11px] text-white/60 mt-1 tabular-nums">/ {fmtTime(duration)}</span>
+                  <div className="mt-4 w-[62%] h-[3px] rounded-full bg-white/25 overflow-hidden">
+                    <div className="h-full bg-white" style={{ width: `${scrub.pct}%` }} />
+                  </div>
+                </div>
+              )}
+
               {/* 暂停 / 缓冲 */}
               {isActive && paused && !err && (
                 <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
@@ -492,6 +599,15 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
             <div className="h-full bg-white/90" style={{ width: `${duration ? (time / duration) * 100 : 0}%` }} />
           </div>
         </div>
+      )}
+
+      {/* 移动端：全屏入口 */}
+      {!isDesktop && (
+        <button onClick={toggleFull} aria-label="全屏"
+          className="absolute right-4 z-20 w-9 h-9 rounded-full bg-black/45 flex items-center justify-center text-white/90 pressable elev-1"
+          style={{ bottom: bottomInset + 56 }}>
+          <IExpand size={17} />
+        </button>
       )}
 
       {/* 选集 / 评论：桌面停靠在右侧（画面让位），移动端底部弹层 */}
