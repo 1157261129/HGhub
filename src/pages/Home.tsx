@@ -48,7 +48,7 @@ export default function Home({ active, bottomInset }: { active: boolean; bottomI
       )}
 
       {/* 移动端：静音 + 搜索 */}
-      {platform !== "windows" && !fs && (
+      {platform === "android" && !fs && (
         <div className="absolute inset-x-0 z-20 flex items-center px-3 pointer-events-none" style={{ top: "calc(var(--sat, 0px) + 6px)" }}>
           <div className="ml-auto flex items-center gap-2">
             <button onClick={() => setMuted((m) => !m)}

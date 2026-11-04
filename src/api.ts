@@ -8,12 +8,19 @@ import type {
 /** 应用版本（构建时由 vite.config.ts 从 package.json 注入） */
 export const APP_VERSION = __APP_VERSION__;
 
-export const isAndroid = /Android/i.test(navigator.userAgent);
-export const platform: "android" | "windows" = isAndroid ? "android" : "windows";
+const ua = navigator.userAgent;
+export const isAndroid = /Android/i.test(ua);
+export const isMacos = /Macintosh|Mac OS X/i.test(ua);
+export const platform: "android" | "windows" | "macos" = isAndroid ? "android" : isMacos ? "macos" : "windows";
 
-/** 自定义协议：Windows 与 Android 都是 http://<scheme>.localhost */
-const scheme = "http";
-export const LOCAL = `${scheme}://hg.localhost`;
+/** 自定义协议地址随平台不同（见 tauri `register_asynchronous_uri_scheme_protocol` 文档）：
+ *  Windows / Android → `http://<scheme>.localhost`
+ *  macOS / iOS / Linux → `<scheme>://localhost`
+ *  Rust 侧 `src-tauri/src/lib.rs` 里改写 m3u8 用的 scheme 必须与此一致。 */
+export const LOCAL = isMacos ? "hg://localhost" : "http://hg.localhost";
+
+/** src 是否已是本地协议地址（避免在详情页把代理地址再包一层） */
+export const isLocalMedia = (src: string) => src.startsWith(`${LOCAL}/`);
 
 /** 封面：经本地协议解密（站点封面是 AES 密文）。 */
 export const cover = (url?: string, _w = 480) =>
@@ -148,34 +155,6 @@ export const dur = (s?: number | string) => {
   return `${m}:${String(ss).padStart(2, "0")}`;
 };
 
-/** 真实解码探针：用 hls.js 挂一个隐藏 video，回报 readyState / 尺寸 / 进度。 */
-export async function mediaPlaybackProbe(): Promise<string> {
-  const Hls = (await import("hls.js")).default;
-  const info = await api.play(117, 3);
-  const src = playlist(info.video_url);
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.style.cssText = "position:fixed;left:-10px;top:-10px;width:2px;height:2px;opacity:0;pointer-events:none";
-  document.body.appendChild(video);
-  return await new Promise<string>((resolve) => {
-    let done = false;
-    const finish = (note: string) => {
-      if (done) return;
-      done = true;
-      const out = `${note} rs=${video.readyState} w=${video.videoWidth} h=${video.videoHeight} t=${video.currentTime.toFixed(2)} err=${video.error?.code ?? 0}`;
-      try { hls.destroy(); } catch { /* ignore */ }
-      video.remove();
-      resolve(out);
-    };
-    const hls = new Hls({ enableWorker: false });
-    hls.on(Hls.Events.ERROR, (_e, d) => { if (d.fatal) finish(`fatal:${d.details}`); });
-    hls.loadSource(src);
-    hls.attachMedia(video);
-    video.play().catch(() => {});
-    window.setTimeout(() => finish("timeout"), 9000);
-  });
-}
 /** 非 m3u8 媒体（mp4 等）走 /seg 原样透传 */
 export function directMedia(url: string): string {
   return `${LOCAL}/seg?u=${encodeURIComponent(url)}`;

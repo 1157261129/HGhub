@@ -22,11 +22,15 @@ pub fn run() {
             let uri = request.uri().clone();
             let path = uri.path().to_string();
             let query = uri.query().unwrap_or("").to_string();
-            // 自定义协议在 Windows 上是 http://<scheme>.localhost，Android 上是 https://
-            // 注意：请求 URI 的 scheme 是 "hg"，不能拿来拼子资源地址，否则 WebView 无法解析。
-            let scheme = "http".to_string();
+            // 自定义协议地址随平台不同（见 tauri Builder 文档）：
+            // Windows/Android 是 http://<scheme>.localhost，macOS/iOS/Linux 是 <scheme>://localhost。
+            // 改写 m3u8 分片与 key 地址时必须用本平台的形式，且要与前端 src/api.ts 的 LOCAL 一致。
+            #[cfg(any(target_os = "windows", target_os = "android"))]
+            let origin = "http://hg.localhost".to_string();
+            #[cfg(not(any(target_os = "windows", target_os = "android")))]
+            let origin = "hg://localhost".to_string();
             tauri::async_runtime::spawn(async move {
-                let resp = media::handle(&path, &query, &scheme).await;
+                let resp = media::handle(&path, &query, &origin).await;
                 responder.respond(resp);
             });
         })
