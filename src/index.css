@@ -381,17 +381,41 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 .player-speed-menu button:hover { background: rgba(255,255,255,.07); color: #fff; }
 .player-speed-menu button[aria-checked="true"] { color: var(--p-primary); }
 .player-volume { display: flex; align-items: center; }
-.player-volume-slider { width: 0; overflow: hidden; transition: width .2s ease; }
+.player-volume-slider { width: 0; overflow: hidden; transition: width .2s ease; display: flex; align-items: center; }
 .player-volume:hover .player-volume-slider,
 .player-volume:focus-within .player-volume-slider { width: 74px; }
 .player-volume-slider input {
-  -webkit-appearance: none; appearance: none; width: 68px; height: 4px; border-radius: 99px;
+  -webkit-appearance: none; appearance: none; display: block; width: 68px; height: 20px;
+  background: transparent; margin: 0 3px; cursor: pointer;
+}
+/* 轨道单独画：滑块才和轨道同轴，不会上下错位 */
+.player-volume-slider input::-webkit-slider-runnable-track {
+  height: 3px; border-radius: 99px;
   background: linear-gradient(to right, var(--p-primary) var(--fill,70%), rgba(255,255,255,.2) var(--fill,70%));
-  margin: 0 3px; cursor: pointer;
 }
 .player-volume-slider input::-webkit-slider-thumb {
   -webkit-appearance: none; width: 10px; height: 10px; border-radius: 50%; background: #fff;
+  margin-top: -3.5px; box-shadow: 0 1px 3px rgba(0,0,0,.45);
 }
+.player-volume-slider input::-moz-range-track {
+  height: 3px; border-radius: 99px; background: rgba(255,255,255,.2);
+}
+.player-volume-slider input::-moz-range-progress {
+  height: 3px; border-radius: 99px; background: var(--p-primary);
+}
+.player-volume-slider input::-moz-range-thumb {
+  width: 10px; height: 10px; border: 0; border-radius: 50%; background: #fff;
+}
+
+/* —— 桌面沉浸：鼠标闲置时淡出播放器 UI（鼠标一动就回来） —— */
+.player-root .desktop-controls,
+.player-root .desktop-social,
+.player-root .desktop-video-meta,
+.player-root .desktop-browse-inline { transition: opacity .28s ease; }
+.player-root.is-idle .desktop-controls,
+.player-root.is-idle .desktop-social,
+.player-root.is-idle .desktop-video-meta,
+.player-root.is-idle .desktop-browse-inline { opacity: 0; pointer-events: none; }
 
 /* —— 进度条 —— */
 .desktop-seek { position: relative; height: 19px; display: flex; align-items: center; cursor: pointer; }

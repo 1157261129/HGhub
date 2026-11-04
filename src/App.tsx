@@ -103,6 +103,9 @@ function AppBody() {
   const vis = (k: Tab) => (tab === k ? "absolute inset-0" : "absolute inset-0 invisible pointer-events-none");
   const pageActive = stack.length === 0 && !loginOpen;
   const bottomInset = platform === "android" ? (fs ? 0 : 48) : 14;
+  /* 栈页（从搜索/分类/我的进入的播放页、图文页）不显示底栏：
+     底栏会盖住评论抽屉的输入框，且这些页面本身是沉浸的 */
+  const stackInset = platform === "android" ? (fs ? 0 : 20) : 14;
 
   return (
     <div className={`absolute inset-0 flex bg-canvas plat-${platform}`}>
@@ -115,11 +118,11 @@ function AppBody() {
 
         {stack.map((p, i) => (
           <div key={p.key} className="absolute inset-0 z-30 bg-bg a-page-in" style={{ boxShadow: "-18px 0 40px rgba(0,0,0,.5)" }}>
-            <StackPage page={p} onBack={pop} wide={wide} top={i === stack.length - 1} bottomInset={bottomInset} />
+            <StackPage page={p} onBack={pop} wide={wide} top={i === stack.length - 1} bottomInset={stackInset} />
           </div>
         ))}
 
-        {platform === "android" && !fs && <TabBar />}
+        {platform === "android" && !fs && stack.length === 0 && <TabBar />}
       </div>
     </div>
   );

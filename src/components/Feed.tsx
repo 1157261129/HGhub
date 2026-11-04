@@ -57,6 +57,23 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   const setTheater = store.setTheater;
   const fs = store.fs;
   const setFs = store.setFs;
+
+  /* 桌面：鼠标闲置 2.8s 自动隐藏播放器 UI（沉浸） */
+  const [idle, setIdle] = useState(false);
+  const idleTimer = useRef<number | undefined>(undefined);
+  const wake = useCallback(() => {
+    setIdle(false);
+    window.clearTimeout(idleTimer.current);
+    idleTimer.current = window.setTimeout(() => setIdle(true), 2800);
+  }, []);
+  useEffect(() => {
+    if (!isDesktop) return undefined;
+    wake();
+    return () => window.clearTimeout(idleTimer.current);
+  }, [isDesktop, wake]);
+  useEffect(() => {
+    if (paused) { setIdle(false); window.clearTimeout(idleTimer.current); }
+  }, [paused]);
   const [fullscreen, setFullscreen] = useState(false);
   const [heartBurst, setHeartBurst] = useState(0);
   /* —— 移动端手势 —— */
@@ -442,7 +459,9 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   }
 
   return (
-    <div className={`absolute inset-0 overflow-hidden bg-black player-root ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${rotated ? "fs-landscape" : ""}`}>
+    <div
+      className={`absolute inset-0 overflow-hidden bg-black player-root ${isDesktop ? "player-surface" : ""} ${theater ? "is-theater" : ""} ${rotated ? "fs-landscape" : ""} ${isDesktop && idle ? "is-idle" : ""}`}
+      onPointerMove={() => { if (isDesktop) wake(); }}>
       {/* 氛围背景 */}
       <div className="absolute inset-0 scale-110 blur-3xl opacity-25 pointer-events-none">
         {posterUrl && <img src={posterUrl} alt="" className="w-full h-full object-cover" />}
@@ -459,7 +478,8 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
                 <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
                 <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay muted={muted}
-                  fit={isDesktop ? "contain" : "cover"}
+                  volume={volume} rate={effRate}
+                  fit={isDesktop || (vsize.w > 0 && vsize.w > vsize.h) ? "contain" : "cover"}
                   onClick={() => { if (isDesktop) videoRef.current?.toggle(); }}
                   onTime={setTime}
                   onDuration={setDuration}
@@ -644,7 +664,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
         <PlayerControls
           paused={paused} time={time} duration={duration} buffered={buffered} rate={rate}
           muted={muted} volume={volume} theater={theater} fullscreen={fullscreen}
-          visible={active}
+          visible={active && !idle}
           nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= videoIds.length - 1}
           nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
           onToggle={() => videoRef.current?.toggle()}

@@ -108,7 +108,7 @@ export default function Category({ wide }: { wide: boolean }) {
           </button>
           <div className="scroll-x flex gap-2.5 px-4 snap-x">
             {posts.map((post) => (
-              <button key={post.id} onClick={() => push({ kind: "feed", videoIds: posts.map((x) => x.id), index: posts.findIndex((x) => x.id === post.id), title: "黄果吃瓜", feedKind: "post" })}
+              <button key={post.id} onClick={() => push({ kind: "post", id: post.id })}
                 className="w-[104px] shrink-0 text-left snap-start pressable">
                 <div className="relative w-full rounded-(--r-sm) overflow-hidden bg-s1 elev-1" style={{ paddingTop: "133%" }}>
                   <Img src={post.cover} />

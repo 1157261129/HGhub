@@ -5,6 +5,7 @@ import { useStore } from "../store";
 import { Empty, Img } from "../components/ui";
 import Player from "../components/Player";
 import { IBack, IFireF, IPlayF } from "../icons";
+import { sanitizeHtml } from "../html";
 
 /* ================= 吃瓜列表 ================= */
 export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean }) {
@@ -56,7 +57,7 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
         {items.length ? (
           <div className={`${wide ? "columns-3 xl:columns-4" : "columns-2"} gap-2`}>
             {items.map((p) => (
-              <button key={p.id} onClick={() => push({ kind: "feed", videoIds: items.map((x) => x.id), index: items.findIndex((x) => x.id === p.id), title: "黄果吃瓜", feedKind: "post" })}
+              <button key={p.id} onClick={() => push({ kind: "post", id: p.id })}
                 className="w-full break-inside-avoid mb-2 relative rounded-(--r-sm) overflow-hidden bg-s1 elev-1 pressable block"
                 style={{ paddingTop: "128%" }}>
                 <Img src={p.cover} />
@@ -82,7 +83,9 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
   );
 }
 
-/* ================= 吃瓜详情 ================= */
+const isHtml = (s: string) => /<(p|div|br|img|h[1-6]|ul|ol|li|blockquote|span|strong|em)\b/i.test(s);
+
+/* ================= 吃瓜详情（网页式浏览） ================= */
 export function PostDetail({ id, onBack }: { id: number; onBack: () => void }) {
   const { toast } = useStore();
   const [post, setPost] = useState<(Post & { content?: string; video_url?: string }) | null>(null);
@@ -137,7 +140,9 @@ export function PostDetail({ id, onBack }: { id: number; onBack: () => void }) {
                 ))}
               </div>
               {post.content && (
-                <div className="mt-3.5 rounded-(--r-md) bg-s2 p-3.5 text-[12.5px] leading-relaxed text-on/80 whitespace-pre-wrap">{post.content}</div>
+                isHtml(post.content)
+                  ? <div className="article-body mt-3.5" dangerouslySetInnerHTML={{ __html: sanitizeHtml(post.content) }} />
+                  : <div className="mt-3.5 rounded-(--r-md) bg-s2 p-3.5 text-[12.5px] leading-relaxed text-on/80 whitespace-pre-wrap">{post.content}</div>
               )}
             </div>
           </>

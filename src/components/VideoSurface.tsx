@@ -20,6 +20,9 @@ type Props = {
   muted?: boolean;
   loop?: boolean;
   fit?: "contain" | "cover";
+  /** 换源后重新套用，避免切集时音量/倍速被浏览器重置 */
+  volume?: number;
+  rate?: number;
   onTime?: (t: number) => void;
   onDuration?: (d: number) => void;
   onSize?: (w: number, h: number) => void;
@@ -34,7 +37,7 @@ type Props = {
 
 /** 只负责「播」：hls.js + video 元素，控制条由外层渲染。 */
 const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
-  { src, poster, autoPlay = true, muted = false, loop = false, fit = "contain",
+  { src, poster, autoPlay = true, muted = false, loop = false, fit = "contain", volume = 1, rate = 1,
     onTime, onDuration, onSize, onPlaying, onPause, onWaiting, onEnded, onError, onClick, className = "" },
   ref,
 ) {
@@ -66,6 +69,16 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
     const proxied = /^https?:\/\/hg\.localhost\//.test(src);
     const url = proxied ? src : playlist(src);
     const useHls = !url.includes("/seg?u=");
+
+    /* 换源时先把音量/倍速套回去：hls 重新 attach 后浏览器会把它们重置成默认值 */
+    const applySettings = () => {
+      const v = videoRef.current;
+      if (!v) return;
+      v.volume = volume;
+      v.muted = muted;
+      v.playbackRate = rate;
+    };
+    applySettings();
 
     if (useHls && Hls.isSupported()) {
       const hls = new Hls({
@@ -101,6 +114,14 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
   }, [src]);
 
   useEffect(() => { if (videoRef.current) videoRef.current.muted = muted; }, [muted]);
+  useEffect(() => { if (videoRef.current) videoRef.current.volume = volume; }, [volume]);
+  useEffect(() => { if (videoRef.current) videoRef.current.playbackRate = rate; }, [rate]);
+
+  const reapply = (v: HTMLVideoElement) => {
+    v.volume = volume;
+    v.muted = muted;
+    v.playbackRate = rate;
+  };
 
   return (
     <video
@@ -111,10 +132,11 @@ const VideoSurface = forwardRef<VideoHandle, Props>(function VideoSurface(
       onClick={onClick}
       className={`w-full h-full bg-black ${fit === "cover" ? "object-cover" : "object-contain"} ${className}`}
       style={{ opacity: ready ? 1 : 0, transition: "opacity .35s" }}
-      onLoadedData={() => setReady(true)}
+      onLoadedData={(e) => { setReady(true); reapply(e.target as HTMLVideoElement); }}
       onTimeUpdate={(e) => onTime?.((e.target as HTMLVideoElement).currentTime)}
       onLoadedMetadata={(e) => {
         const v = e.target as HTMLVideoElement;
+        reapply(v);
         onDuration?.(v.duration || 0);
         onSize?.(v.videoWidth || 0, v.videoHeight || 0);
       }}
