@@ -500,3 +500,31 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 .article-body li { margin: 4px 0; }
 .article-body blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--p-primary); background: rgba(255,255,255,.04); border-radius: 6px; }
 html.theme-light .article-body { color: rgba(20,24,30,.82); }
+
+/* ===================================================================
+   视频浮层 / 移动端底栏：固定「亮字压暗底」
+   —— 这些元素压在视频画面上，颜色不能跟主题走。
+   浅色主题下 --p-on 是近黑色，若文字用主题色（或依赖 /透明度 工具类
+   失效回退成继承色），整排文字会直接「消失」在画面里。
+   这里用不受主题影响的显式色，并显式给出 rgba 底色（不依赖 color-mix）。
+   =================================================================== */
+.hg-ink   { color: #fff; }
+.hg-ink-2 { color: rgba(255, 255, 255, .92); }
+.hg-ink-3 { color: rgba(255, 255, 255, .78); }
+.hg-ink-4 { color: rgba(255, 255, 255, .6); }
+.hg-gold  { color: #f3c969; }
+.hg-link  { color: #8fd0ff; }
+.hg-chip         { background: rgba(0, 0, 0, .45); color: #fff; }
+.hg-chip-strong  { background: rgba(0, 0, 0, .62); color: #fff; }
+.hg-chip:active  { background: rgba(0, 0, 0, .62); }
+.hg-ov-shadow    { text-shadow: 0 1px 8px rgba(0, 0, 0, .7); }
+
+/* 安卓 WebView 点按会留下系统黄色焦点框，视频/底栏这类沉浸按钮一律去掉 */
+.hg-tabbar button,
+.hg-player-ui button,
+.hg-chip,
+.hg-chip-strong { outline: none; -webkit-tap-highlight-color: transparent; }
+.hg-tabbar button:focus,
+.hg-tabbar button:focus-visible,
+.hg-player-ui button:focus,
+.hg-player-ui button:focus-visible { outline: none; }

@@ -84,6 +84,41 @@ export const api = {
   like: (id: number, ep: number, on: boolean) => call<unknown>("api_like", { id, ep, on }),
   collect: (id: number, on: boolean) => call<unknown>("api_collect", { id, on }),
   follow: (uid: number, on: boolean) => call<unknown>("api_follow", { uid, on }),
+
+  /* 线路（数据源）：固定线路写死在 Rust 侧，镜像线路按需从地址发布页拉取 */
+  lineState: () => call<LineState>("line_state"),
+  lineSet: (url: string) => call<string>("line_set", { url }),
+  lineMirrors: () => call<LineMirrors>("line_mirrors"),
+  lineProbe: (urls: string[]) => call<LineProbe[]>("line_probe", { urls }),
+
+  /* 更新检查：对比 GitHub Release 的 tag */
+  checkUpdate: () => call<UpdateInfo>("check_update"),
+  openUrl: (url: string) => call<void>("open_url", { url }),
+};
+
+/* ── 更新检查 ───────────────────────────────────────────── */
+
+export type UpdateInfo = {
+  current: string;
+  latest: string;
+  tag?: string;
+  has_update: boolean;
+  url: string;
+  name?: string;
+  published_at?: string;
+  notes?: string;
+};
+
+/* ── 线路（数据源） ─────────────────────────────────────── */
+
+export type LineItem = { name?: string; url: string; host?: string };
+export type LineState = { base: string; default: string; fixed: LineItem[] };
+export type LineMirrors = { source: string; script?: string; items: LineItem[] };
+export type LineProbe = { url: string; ok: boolean; status?: number; ms: number; error?: string };
+
+/** `https://a.b/c` → `a.b`（线路展示用） */
+export const hostOf = (url: string) => {
+  try { return new URL(url).host; } catch { return url.replace(/^https?:\/\//, "").replace(/\/.*$/, ""); }
 };
 
 /* ── 自检：验证 webview → 本地协议 → 上游 的取流链路 ───────── */
