@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useStore, type Page, type Tab } from "./store";
-import { selfTest, mediaPlaybackProbe } from "./api";
+import { selfTest } from "./api";
 import { addPluginListener, invoke } from "@tauri-apps/api/core";
 import { runBack } from "./back";
 import Home from "./pages/Home";
@@ -11,7 +11,7 @@ import Feed from "./components/Feed";
 import { PostsPage, PostDetail } from "./pages/Posts";
 import LoginModal from "./components/LoginModal";
 import { ToastHost } from "./components/ui";
-import { WindowsRail, WindowsTitleBar } from "./components/WindowsChrome";
+import { DesktopRail, DesktopTitleBar } from "./components/DesktopChrome";
 import ResizeHandles from "./components/ResizeHandles";
 import { IGrid, IGridF, IHome, IHomeF, ISearch, IUser, IUserF, Logo } from "./icons";
 
@@ -69,7 +69,7 @@ function StackPage({ page, onBack, wide, top, bottomInset }: {
 function AppBody() {
   const { platform, tab, setTab, stack, pop, loginOpen, setLoginOpen, fs } = useStore();
   const mainRef = useRef<HTMLDivElement>(null);
-  const [wide, setWide] = useState(platform === "windows");
+  const [wide, setWide] = useState(platform !== "android");
   const [collapsed, setCollapsed] = useState(false);
 
   useLayoutEffect(() => {
@@ -109,7 +109,7 @@ function AppBody() {
 
   return (
     <div className={`absolute inset-0 flex bg-canvas plat-${platform}`}>
-      {platform === "windows" && <WindowsRail collapsed={collapsed} />}
+      {platform !== "android" && <DesktopRail collapsed={collapsed} />}
       <div ref={mainRef} className="relative flex-1 min-w-0 overflow-hidden win-main">
         <div className={vis("home")}><Home active={pageActive && tab === "home"} bottomInset={bottomInset} /></div>
         <div className={vis("search")}><Search active={pageActive && tab === "search"} wide={wide} /></div>
@@ -128,23 +128,24 @@ function AppBody() {
   );
 }
 
-/* ============ 桌面窗口壳 ============ */
+/* ============ 桌面窗口壳（Windows / macOS）============ */
 function DesktopShell() {
   const [collapsed, setCollapsed] = useState(false);
-  const theater = useStore().theater;
+  const { theater, platform } = useStore();
   return (
-    <div className="absolute inset-0 flex flex-col bg-canvas win-root">
-      <WindowsTitleBar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
+    <div className={`absolute inset-0 flex flex-col bg-canvas win-root plat-${platform}`}>
+      <DesktopTitleBar collapsed={collapsed} onToggle={() => setCollapsed((c) => !c)} />
       <div className="relative flex-1 min-h-0">
         <ShellInner collapsed={collapsed || theater} theater={theater} />
       </div>
-      <ResizeHandles />
+      {/* 边缘缩放热区只对无边框窗口（Windows）有效，macOS 走原生窗口边框 */}
+      {platform === "windows" && <ResizeHandles />}
     </div>
   );
 }
 
 function ShellInner({ collapsed, theater }: { collapsed: boolean; theater: boolean }) {
-  const { stack, pop, loginOpen, setLoginOpen, tab, setTab } = useStore();
+  const { stack, pop, loginOpen, setLoginOpen, tab, setTab, platform } = useStore();
   const mainRef = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(true);
 
@@ -179,8 +180,8 @@ function ShellInner({ collapsed, theater }: { collapsed: boolean; theater: boole
   const pageActive = stack.length === 0 && !loginOpen;
 
   return (
-    <div className="absolute inset-0 flex bg-canvas plat-windows">
-      {!theater && <WindowsRail collapsed={collapsed} />}
+    <div className={`absolute inset-0 flex bg-canvas plat-${platform}`}>
+      {!theater && <DesktopRail collapsed={collapsed} />}
       <div ref={mainRef} className={`relative flex-1 min-w-0 overflow-hidden win-main ${theater ? "is-theater-main" : ""}`}>
         <div className={vis("home")}><Home active={pageActive && tab === "home"} bottomInset={14} /></div>
         <div className={vis("search")}><Search active={pageActive && tab === "search"} wide={wide} /></div>
@@ -255,7 +256,7 @@ export default function App() {
 
   return (
     <>
-      {platform === "windows" ? <DesktopShell /> : <MobileShell />}
+      {platform === "android" ? <MobileShell /> : <DesktopShell />}
       <LoginModal />
       <ToastHost />
       {/* 登录遮罩键盘处理占位 */}

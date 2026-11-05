@@ -229,7 +229,7 @@ export default function Profile({ wide }: { wide: boolean }) {
           </button>
         </div>
 
-        <div className="text-center text-[10px] text-dim mt-5">HGhub {APP_VERSION} · {platform === "android" ? "Android" : "Windows"} 客户端</div>
+        <div className="text-center text-[10px] text-dim mt-5">HGhub {APP_VERSION} · {platform === "android" ? "Android" : platform === "macos" ? "macOS" : "Windows"} 客户端</div>
 
         <Modal open={about} onClose={() => setAbout(false)} width={392}>
           <div className="p-5">

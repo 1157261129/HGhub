@@ -210,7 +210,10 @@ fn respond(
 }
 
 /// 统一入口：`hg://localhost/img?u=` / `hls?u=` / `seg?u=`
-pub async fn handle(path: &str, query: &str, scheme: &str) -> Response<Vec<u8>> {
+///
+/// `origin` 是本平台自定义协议的完整基址（Windows/Android 为 `http://hg.localhost`，
+/// macOS/iOS/Linux 为 `hg://localhost`），用于改写 m3u8 里的分片与 key 地址。
+pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> {
     let target = query
         .split('&')
         .find_map(|kv| kv.strip_prefix("u="))
@@ -221,7 +224,7 @@ pub async fn handle(path: &str, query: &str, scheme: &str) -> Response<Vec<u8>> 
         return respond(400, "text/plain", b"missing u".to_vec(), "no-store");
     }
 
-    let prefix = format!("{scheme}://hg.localhost");
+    let prefix = origin;
 
     match path {
         "/img" => match load_image(&target).await {
@@ -265,7 +268,7 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         println!("raw playlist len={} head={}", text.len(), &text[..text.len().min(160)]);
         let q = format!("u={}", enc(&url));
-        let resp = handle("/hls", &q, "http").await;
+        let resp = handle("/hls", &q, "http://hg.localhost").await;
         let body = String::from_utf8_lossy(resp.body()).to_string();
         println!("proxied status={} len={}", resp.status(), body.len());
         assert!(body.contains("#EXTM3U"));
@@ -275,7 +278,7 @@ mod tests {
             .expect("seg line").to_string();
         println!("seg line: {}", &seg_line[..seg_line.len().min(120)]);
         let seg_q = seg_line.split("?u=").nth(1).unwrap();
-        let seg = handle("/seg", &format!("u={seg_q}"), "http").await;
+        let seg = handle("/seg", &format!("u={seg_q}"), "http://hg.localhost").await;
         println!("segment status={} len={}", seg.status(), seg.body().len());
         assert_eq!(seg.status(), 200);
         assert!(seg.body().len() > 1000);
@@ -285,7 +288,7 @@ mod tests {
     async fn playlist_rewrite_works() {
         let m3u8 = "https://yd-lphu-hls.hzjvlo.cn/videos5/247f3c9862e8e1537ade0b20c45ac962/247f3c9862e8e1537ade0b20c45ac962.m3u8?auth_key=1793700503-0-0-b9575bb11258cf40cd5499c052fc5820&v=3&time=0&via=hgdj&via_bm=dx";
         let q = format!("u={}", enc(m3u8));
-        let resp = handle("/hls", &q, "http").await;
+        let resp = handle("/hls", &q, "http://hg.localhost").await;
         let body = String::from_utf8_lossy(resp.body()).to_string();
         println!("status={} len={}", resp.status(), body.len());
         println!("--- head ---\n{}", &body[..body.len().min(600)]);
