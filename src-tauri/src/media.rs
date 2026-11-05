@@ -1,7 +1,8 @@
 //! 媒体层：封面解密 + HLS 代理。
 //!
 //! 站点封面是 AES-128-CBC 密文，m3u8 内部分片/key 又可能被 WebView 的 CORS 拦住，
-//! 所以图片与视频统一走本地自定义协议 `hg://localhost/...`。
+//! 所以图片与视频统一走本地自定义协议（Windows/Android 为 `http://hg.localhost`，
+//! macOS 为 `hg://localhost`，见 [`LOCAL_ORIGIN`]）。
 
 use crate::net::fetch_bytes;
 use aes::cipher::{BlockDecrypt, KeyInit};
@@ -11,6 +12,16 @@ use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tauri::http::{Response, StatusCode};
+
+/// 本平台自定义协议的完整基址。
+///
+/// Tauri 的自定义协议地址随平台不同：Windows / Android 是 `http://<scheme>.localhost`，
+/// macOS / iOS / Linux 是 `<scheme>://localhost`。m3u8 里的分片与 key 地址按它改写。
+/// 前端 `src/api.ts` 的 `LOCAL` 必须与此一致，否则封面与视频全部加载失败。
+#[cfg(any(target_os = "windows", target_os = "android"))]
+pub const LOCAL_ORIGIN: &str = "http://hg.localhost";
+#[cfg(not(any(target_os = "windows", target_os = "android")))]
+pub const LOCAL_ORIGIN: &str = "hg://localhost";
 
 const IMG_KEY: &[u8] = b"f5d965df75336270";
 const IMG_IV: &[u8] = b"97b60394abc2fbe1";
@@ -209,10 +220,10 @@ fn respond(
         .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
-/// 统一入口：`hg://localhost/img?u=` / `hls?u=` / `seg?u=`
+/// 统一入口：`<LOCAL_ORIGIN>/img?u=` / `hls?u=` / `seg?u=`
 ///
-/// `origin` 是本平台自定义协议的完整基址（Windows/Android 为 `http://hg.localhost`，
-/// macOS/iOS/Linux 为 `hg://localhost`），用于改写 m3u8 里的分片与 key 地址。
+/// `origin` 是本平台自定义协议的完整基址，见 [`LOCAL_ORIGIN`]；用于改写 m3u8 里的
+/// 分片与 key 地址。正常情况下调用方直接传 [`LOCAL_ORIGIN`]。
 pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> {
     let target = query
         .split('&')
@@ -224,14 +235,12 @@ pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> 
         return respond(400, "text/plain", b"missing u".to_vec(), "no-store");
     }
 
-    let prefix = origin;
-
     match path {
         "/img" => match load_image(&target).await {
             Ok((kind, bytes)) => respond(200, &kind, bytes.as_ref().clone(), "public, max-age=86400"),
             Err(e) => respond(502, "text/plain", e.into_bytes(), "no-store"),
         },
-        "/hls" => match load_playlist(&target, &prefix).await {
+        "/hls" => match load_playlist(&target, origin).await {
             Ok(text) => respond(
                 200,
                 "application/vnd.apple.mpegurl",
@@ -268,7 +277,7 @@ mod tests {
         let text = String::from_utf8_lossy(&bytes);
         println!("raw playlist len={} head={}", text.len(), &text[..text.len().min(160)]);
         let q = format!("u={}", enc(&url));
-        let resp = handle("/hls", &q, "http://hg.localhost").await;
+        let resp = handle("/hls", &q, LOCAL_ORIGIN).await;
         let body = String::from_utf8_lossy(resp.body()).to_string();
         println!("proxied status={} len={}", resp.status(), body.len());
         assert!(body.contains("#EXTM3U"));
@@ -278,7 +287,7 @@ mod tests {
             .expect("seg line").to_string();
         println!("seg line: {}", &seg_line[..seg_line.len().min(120)]);
         let seg_q = seg_line.split("?u=").nth(1).unwrap();
-        let seg = handle("/seg", &format!("u={seg_q}"), "http://hg.localhost").await;
+        let seg = handle("/seg", &format!("u={seg_q}"), LOCAL_ORIGIN).await;
         println!("segment status={} len={}", seg.status(), seg.body().len());
         assert_eq!(seg.status(), 200);
         assert!(seg.body().len() > 1000);
@@ -288,7 +297,7 @@ mod tests {
     async fn playlist_rewrite_works() {
         let m3u8 = "https://yd-lphu-hls.hzjvlo.cn/videos5/247f3c9862e8e1537ade0b20c45ac962/247f3c9862e8e1537ade0b20c45ac962.m3u8?auth_key=1793700503-0-0-b9575bb11258cf40cd5499c052fc5820&v=3&time=0&via=hgdj&via_bm=dx";
         let q = format!("u={}", enc(m3u8));
-        let resp = handle("/hls", &q, "http://hg.localhost").await;
+        let resp = handle("/hls", &q, LOCAL_ORIGIN).await;
         let body = String::from_utf8_lossy(resp.body()).to_string();
         println!("status={} len={}", resp.status(), body.len());
         println!("--- head ---\n{}", &body[..body.len().min(600)]);

@@ -13,17 +13,23 @@ const appWindow = () => getCurrentWindow();
 export function DesktopTitleBar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const { theme, setTheme, setTab, platform } = useStore();
   const [maxed, setMaxed] = useState(false);
+  /* macOS 原生全屏：红绿灯被系统隐藏，标题栏左侧 84px 让位要收回（见 index.css） */
+  const [nativeFs, setNativeFs] = useState(false);
 
   useEffect(() => {
     let un: (() => void) | undefined;
-    appWindow().isMaximized().then(setMaxed).catch(() => {});
-    appWindow().onResized(() => { appWindow().isMaximized().then(setMaxed).catch(() => {}); })
+    const sync = () => {
+      appWindow().isMaximized().then(setMaxed).catch(() => {});
+      appWindow().isFullscreen().then(setNativeFs).catch(() => {});
+    };
+    sync();
+    appWindow().onResized(sync)
       .then((f: () => void) => { un = f; }).catch(() => {});
     return () => { un?.(); };
   }, []);
 
   return (
-    <header className="win-titlebar" data-tauri-drag-region
+    <header className={`win-titlebar ${nativeFs ? "is-native-fs" : ""}`} data-tauri-drag-region
       onDoubleClick={(e) => { if (!(e.target as HTMLElement).closest("button")) appWindow().toggleMaximize().catch(() => {}); }}>
       <div className="win-wordmark" data-tauri-drag-region>
         <Logo size={24} />
