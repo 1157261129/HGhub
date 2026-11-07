@@ -4,6 +4,7 @@ use crate::net::{base, edge};
 use crate::session::SessionStore;
 use serde_json::{json, Value};
 use tauri::State;
+use tauri_plugin_opener::OpenerExt;
 
 pub struct Api {
     pub session: SessionStore,
@@ -171,45 +172,12 @@ pub async fn check_update() -> Result<Value, String> {
 
 /// 用系统默认浏览器打开链接（只允许 http/https）。
 #[tauri::command]
-pub async fn open_url(url: String) -> Result<(), String> {
-    if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err("只允许打开 http(s) 链接".to_string());
-    }
-    open_external(&url)
-}
-
-#[cfg(target_os = "windows")]
-fn open_external(url: &str) -> Result<(), String> {
-    use std::os::windows::process::CommandExt;
-    std::process::Command::new("cmd")
-        .args(["/C", "start", "", url])
-        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW，别闪一下黑框
-        .spawn()
-        .map(|_| ())
+pub async fn open_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    let target = crate::network_policy::parse_target(&url)?;
+    // 固定使用默认处理器；不向前端暴露可指定程序的 opener 命令。
+    app.opener()
+        .open_url(target.as_str(), None::<&str>)
         .map_err(|e| e.to_string())
-}
-
-#[cfg(target_os = "macos")]
-fn open_external(url: &str) -> Result<(), String> {
-    std::process::Command::new("open")
-        .arg(url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(all(unix, not(any(target_os = "macos", target_os = "android"))))]
-fn open_external(url: &str) -> Result<(), String> {
-    std::process::Command::new("xdg-open")
-        .arg(url)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-#[cfg(target_os = "android")]
-fn open_external(_url: &str) -> Result<(), String> {
-    Err("移动端请手动在浏览器打开".to_string())
 }
 
 /* ───────────────────────── 会话 ───────────────────────── */
@@ -500,6 +468,46 @@ pub async fn api_post_comments(
 #[cfg(test)]
 mod tests {
     use super::is_newer;
+    use serde_json::Value;
+
+    #[test]
+    fn frontend_cannot_bypass_url_policy_with_opener_commands() {
+        let capability: Value =
+            serde_json::from_str(include_str!("../capabilities/default.json")).unwrap();
+        for permission in capability["permissions"].as_array().unwrap() {
+            let name = permission
+                .as_str()
+                .or_else(|| permission["identifier"].as_str())
+                .unwrap();
+            assert!(
+                !name.starts_with("opener:"),
+                "frontend opener command exposed: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn external_links_are_urls_not_shell_commands() {
+        for raw in [
+            "https://example.com/|calc.exe",
+            "https://example.com/?a=1&b=2",
+            "https://example.com/%25PATH%25",
+            "https://example.com/%VAR%",
+        ] {
+            assert!(crate::network_policy::parse_target(raw).is_ok());
+        }
+        for raw in [
+            "file:///etc/passwd",
+            "mailto:user@example.com",
+            "tel:123",
+            "data:text/html,test",
+            "javascript:alert(1)",
+            "https://example.com/\0cmd",
+            "https://user:password@example.com/",
+        ] {
+            assert!(crate::network_policy::parse_target(raw).is_err());
+        }
+    }
 
     #[test]
     fn compares_versions() {
