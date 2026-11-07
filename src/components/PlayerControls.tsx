@@ -13,6 +13,7 @@ type Props = {
   theater?: boolean;
   fullscreen?: boolean;
   visible?: boolean;
+  seekEnabled?: boolean;
   nextDisabled?: boolean;
   nextTitle?: string;
   onToggle: () => void;
@@ -30,7 +31,7 @@ const clock = (s: number) => fmtTime(Math.max(0, s || 0)).padStart(5, "0");
 
 export default function PlayerControls({
   paused, time, duration, buffered = 0, rate, muted, volume, theater = false, fullscreen = false,
-  visible = true, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
+  visible = true, seekEnabled = true, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
 }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -46,12 +47,12 @@ export default function PlayerControls({
   return (
     <div ref={boxRef} className={`desktop-controls ${fullscreen ? "is-fullscreen" : ""} ${visible ? "" : "is-hidden"}`}
       onPointerDown={(e) => e.stopPropagation()}>
-      <div className="desktop-seek">
+      <div className={`desktop-seek ${seekEnabled ? "is-seekable" : ""}`}>
         <div className="desktop-seek-track">
           <span className="desktop-seek-buffer" style={{ width: `${Math.min(1, buffered) * 100}%` }} />
           <span className="desktop-seek-played" style={{ width: `${pct}%` }} />
         </div>
-        <input aria-label="播放进度" type="range" min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 0)}
+        <input aria-label="播放进度" type="range" disabled={!seekEnabled} min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 0)}
           onChange={(e) => onSeek(Number(e.target.value))} />
       </div>
 

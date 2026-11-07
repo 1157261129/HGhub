@@ -423,6 +423,10 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 .player-root.is-idle .desktop-video-meta,
 .player-root.is-idle .desktop-browse-inline { opacity: 0; pointer-events: none; }
 
+/* 进度条在淡出时仍保留命中区域，避免快速点击穿透到视频并触发暂停。
+   仅激活播放页启用；其他隐藏按钮继续不接收点击。 */
+.player-root.is-idle .desktop-controls .desktop-seek.is-seekable { pointer-events: auto; }
+
 /* —— 进度条 —— */
 .desktop-seek { position: relative; height: 19px; display: flex; align-items: center; cursor: pointer; }
 .desktop-seek-track {

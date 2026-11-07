@@ -746,6 +746,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           paused={paused} time={time} duration={duration} buffered={buffered} rate={rate}
           muted={muted} volume={volume} theater={theater} fullscreen={fullscreen}
           visible={active && !idle}
+          seekEnabled={active}
           nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= videoIds.length - 1}
           nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
           onToggle={() => videoRef.current?.toggle()}
