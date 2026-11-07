@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { api, platform as envPlatform } from "./api";
+import { isStrictSecurity, setStrictSecurity as setHtmlStrictSecurity } from "./html";
 import type { User } from "./types";
 
 export type Platform = "android" | "windows" | "macos";
@@ -119,6 +120,7 @@ type Store = {
   muted: boolean; setMuted: (v: boolean | ((p: boolean) => boolean)) => void;
   volume: number; setVolume: (v: number) => void;
   searchHist: string[]; addSearch: (q: string) => void; clearSearchHist: () => void;
+  strictSecurity: boolean; cliRelaxed: boolean; setStrictSecurity: (on: boolean) => Promise<void>;
   toasts: Toast[]; toast: (msg: string, icon?: Toast["icon"]) => void;
 };
 
@@ -136,6 +138,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [theater, setTheaterState] = useState(false);
   const [fs, setFsState] = useState(false);
+  const [strictSecurity, setStrictSecurityState] = useState<boolean>(isStrictSecurity);
+  const [cliRelaxed, setCliRelaxed] = useState(false);
   const toastSeq = useRef(0);
 
   useEffect(() => {
@@ -149,8 +153,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     api.boot()
-      .then((r) => { if (r.user && (r.user as User).id) setUser(r.user as User); })
+      .then((r) => {
+        if (r.user && (r.user as User).id) setUser(r.user as User);
+        if (typeof r.strict_security === "boolean") {
+          setStrictSecurityState(r.strict_security);
+          setHtmlStrictSecurity(r.strict_security);
+        }
+        setCliRelaxed(!!r.cli_relaxed);
+      })
       .catch(() => { /* 离线也能用 */ });
+  }, []);
+
+  const setStrictSecurity = useCallback(async (on: boolean) => {
+    setStrictSecurityState(on);
+    setHtmlStrictSecurity(on);
+    try {
+      const saved = await api.securitySet(on);
+      setStrictSecurityState(saved);
+      setHtmlStrictSecurity(saved);
+    } catch { /* ignore */ }
   }, []);
 
   const toast = useCallback((msg: string, icon?: Toast["icon"]) => {
@@ -245,10 +266,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
     muted: p.muted, setMuted, volume: p.volume, setVolume, theater, setTheater, fs, setFs,
     searchHist: p.searchHist, addSearch, clearSearchHist,
+    strictSecurity, cliRelaxed, setStrictSecurity,
     toasts, toast,
   }), [theme, tab, setTab, stack, push, pop, user, loginOpen, logout,
     p, toggleLikeLocal, toggleFavLocal, toggleFollowLocal, addHistory, clearHistory,
-    setMuted, setVolume, addSearch, clearSearchHist, toasts, toast, theater, setTheater, fs, setFs]);
+    setMuted, setVolume, addSearch, clearSearchHist, strictSecurity, cliRelaxed, setStrictSecurity,
+    toasts, toast, theater, setTheater, fs, setFs]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
