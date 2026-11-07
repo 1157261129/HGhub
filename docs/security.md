@@ -45,6 +45,8 @@ cargo test --locked --manifest-path src-tauri/Cargo.toml --lib -- \
 
 2026-11-07 本地复测：Linux 上前端生产构建、回归测试 TypeScript 检查及 `cargo check --locked` 通过；Rust 本地测试 16 项通过、0 失败（跳过上述 6 项联网测试）。独立 Chromium 分别模拟 Windows、macOS 用户代理，验证 `http://hg.localhost` 与 `hg://localhost` 两套图片协议分支，每套 29 项全部通过；这不等同于原生 Windows/macOS WebView 实测。复测修复了最终 URL 规则误删链接 `target`/`rel` 和 macOS 代理图片重复清洗丢失的问题。Linux 编译库仅下载、解包到 `/tmp` 使用，未安装到系统。
 
+审查后续修正与未采用建议的逐项说明、对应 commit 及验证范围，见 [安全审查后续复核](review-followup.md)。本轮前端生产构建（含测试类型检查）、Rust 编译检查通过；本地 Rust 回归 26 项通过（排除 6 项联网测试），浏览器回归 70 项通过。安全模式现在仅由 Rust 的 `security.json` 持久化，前端收到后端确认后才切换；诊断 DNS 仅报告数量和 FakeIP 标记。匿名业务 GET 可逐跳校验后跟随 301/302/303，带凭据/请求体的业务请求不跟随；只有无请求体的逻辑 GET 允许重试。HLS 时间线元数据保留，外部 URI 和资源列表字段仍过滤。
+
 本次仅处理审查编号 1、3、5、8；媒体/日志容量上限和 token 明文存储仍需另行处理。外链改用固定版本 `tauri-plugin-opener` 2.7.2（锁定 `open` 5.4.5），HTTP(S) URL 仍经 Rust 地址策略校验，以默认处理器 `with = None` 打开。Windows 路径启用 `shellexecute-on-windows`，通过 `ShellExecuteExW` 传递完整 URL，不经过命令解释器；关闭插件自动接管链接，且不给前端授予 `opener:*` capability，继续统一经过现有校验入口（P1-1）。插件要求 Rust 1.90，项目最低版本声明同步调整。网络错误文本的 UTF-8 截断在改动网络入口时一并改为安全截断。
 
 参考：[DOMPurify](https://github.com/cure53/DOMPurify)、[Tauri CSP](https://v2.tauri.app/security/csp/)、[reqwest DNS 地址固定接口](https://docs.rs/reqwest/0.12.28/reqwest/struct.ClientBuilder.html#method.resolve_to_addrs)。
