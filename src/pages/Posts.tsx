@@ -86,7 +86,7 @@ export function PostsPage({ onBack, wide }: { onBack: () => void; wide: boolean 
 const isHtml = (s: string) => /<(p|div|br|img|h[1-6]|ul|ol|li|blockquote|span|strong|em)\b/i.test(s);
 
 /* ================= 吃瓜详情（网页式浏览） ================= */
-export function PostDetail({ id, onBack }: { id: number; onBack: () => void }) {
+export function PostDetail({ id, onBack, active = true }: { id: number; onBack: () => void; active?: boolean }) {
   const { toast, strictSecurity } = useStore();
   const [post, setPost] = useState<(Post & { content?: string; video_url?: string }) | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -123,7 +123,7 @@ export function PostDetail({ id, onBack }: { id: number; onBack: () => void }) {
           <>
             <div className="relative w-full bg-black" style={{ height: "min(40vh, 360px)" }}>
               {play && post.video_url ? (
-                <Player src={post.video_url} poster={cover(post.cover)} autoPlay controls className="w-full h-full" />
+                <Player src={post.video_url} poster={cover(post.cover)} autoPlay controls diagnosticContext={{ video_id: id, active }} className="w-full h-full" />
               ) : (
                 <button onClick={() => { if (post.video_url) setPlay(true); else toast("该帖子没有视频", "info"); }} className="absolute inset-0">
                   <Img src={post.cover} eager />

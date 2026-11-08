@@ -17,7 +17,8 @@ type Props = {
   nextDisabled?: boolean;
   nextTitle?: string;
   onToggle: () => void;
-  onSeek: (t: number) => void;
+  onSeek: (t: number, source?: string) => void;
+  onSeekInteraction?: (phase: string, input: string, target: number, pointerTarget?: number) => void;
   onRate: (r: number) => void;
   onMute: () => void;
   onVolume: (v: number) => void;
@@ -31,10 +32,11 @@ const clock = (s: number) => fmtTime(Math.max(0, s || 0)).padStart(5, "0");
 
 export default function PlayerControls({
   paused, time, duration, buffered = 0, rate, muted, volume, theater = false, fullscreen = false,
-  visible = true, seekEnabled = true, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
+  visible = true, seekEnabled = true, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onSeekInteraction, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
 }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
+  const pointer = useRef<{ x: number; moved: boolean } | null>(null);
   const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
 
   useEffect(() => {
@@ -53,7 +55,24 @@ export default function PlayerControls({
           <span className="desktop-seek-played" style={{ width: `${pct}%` }} />
         </div>
         <input aria-label="播放进度" type="range" disabled={!seekEnabled} min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 0)}
-          onChange={(e) => onSeek(Number(e.target.value))} />
+          onPointerDown={(e) => {
+            pointer.current = { x: e.clientX, moved: false };
+            const rect = e.currentTarget.getBoundingClientRect();
+            const target = rect.width ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration : undefined;
+            onSeekInteraction?.("down", "pointer", Number(e.currentTarget.value), target);
+          }}
+          onPointerMove={(e) => { if (pointer.current && Math.abs(e.clientX - pointer.current.x) > 3) pointer.current.moved = true; }}
+          onPointerUp={(e) => {
+            onSeekInteraction?.("up", pointer.current?.moved ? "drag" : "click", Number(e.currentTarget.value));
+            pointer.current = null;
+          }}
+          onPointerCancel={(e) => { onSeekInteraction?.("cancel", "pointer", Number(e.currentTarget.value)); pointer.current = null; }}
+          onBlur={() => { pointer.current = null; }}
+          onChange={(e) => {
+            const input = pointer.current ? (pointer.current.moved ? "drag" : "click") : "keyboard";
+            onSeekInteraction?.("change", input, Number(e.target.value));
+            onSeek(Number(e.target.value), `desktop_${input}`);
+          }} />
       </div>
 
       <div className="desktop-control-row">
