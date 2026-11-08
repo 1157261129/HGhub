@@ -261,9 +261,6 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
   /* 倍速同步（长按 2x / 锁定 2x / 基准倍速） */
   useEffect(() => { videoRef.current?.rate(effRate); }, [effRate, playKey]);
 
-  /* 非激活时暂停 */
-  useEffect(() => { if (!active) videoRef.current?.pause(); }, [active]);
-
   /* 离开播放页时把最后位置落盘 */
   useEffect(() => () => {
     const s = liveRef.current;
@@ -526,7 +523,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
               {isActive && playUrl ? (
                 <div className="absolute inset-0" style={{ touchAction: "pan-y" }}
                   onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-                <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay muted={muted}
+                <VideoSurface ref={videoRef} src={playUrl} poster={posterUrl} autoPlay active={active} muted={muted}
                   diagnosticContext={{ active, view: mode, kind, video_id: curId, episode: curEp }}
                   volume={volume} rate={effRate}
                   fit={isDesktop || (vsize.w > 0 && vsize.w > vsize.h) ? "contain" : "cover"}
@@ -752,6 +749,7 @@ export default function Feed({ videoIds, startIndex = 0, title = "", mode, kind 
           muted={muted} volume={volume} theater={theater} fullscreen={fullscreen}
           visible={active && !idle}
           seekEnabled={active}
+          seekKey={playKey}
           nextDisabled={!episodes.some((e) => e.ep_num === curEp + 1) && index >= videoIds.length - 1}
           nextTitle={episodes.some((e) => e.ep_num === curEp + 1) ? "下一集 E" : "下一部 ↓"}
           onToggle={() => videoRef.current?.toggle()}

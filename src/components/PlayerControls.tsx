@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { fmtTime } from "../api";
+import { useSeekInput } from "../useSeekInput";
 import { ICheck, ICompress, IExpand, INext, IPauseF, IPip, IPlayF, ITheater, IVol, IVolMute } from "../icons";
 
 type Props = {
@@ -14,6 +15,7 @@ type Props = {
   fullscreen?: boolean;
   visible?: boolean;
   seekEnabled?: boolean;
+  seekKey?: string;
   nextDisabled?: boolean;
   nextTitle?: string;
   onToggle: () => void;
@@ -32,12 +34,13 @@ const clock = (s: number) => fmtTime(Math.max(0, s || 0)).padStart(5, "0");
 
 export default function PlayerControls({
   paused, time, duration, buffered = 0, rate, muted, volume, theater = false, fullscreen = false,
-  visible = true, seekEnabled = true, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onSeekInteraction, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
+  visible = true, seekEnabled = true, seekKey, nextDisabled = false, nextTitle = "下一个", onToggle, onSeek, onSeekInteraction, onRate, onMute, onVolume, onPip, onTheater, onFullscreen, onNext,
 }: Props) {
   const [speedOpen, setSpeedOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
-  const pointer = useRef<{ x: number; moved: boolean } | null>(null);
-  const pct = duration ? Math.min(100, (time / duration) * 100) : 0;
+  const seek = useSeekInput({ time, duration, enabled: seekEnabled, resetKey: seekKey, onInteraction: onSeekInteraction,
+    onSeek: (target, input) => onSeek(target, `desktop_${input}`) });
+  const pct = duration ? Math.min(100, (seek.time / duration) * 100) : 0;
 
   useEffect(() => {
     if (!speedOpen) return;
@@ -54,25 +57,7 @@ export default function PlayerControls({
           <span className="desktop-seek-buffer" style={{ width: `${Math.min(1, buffered) * 100}%` }} />
           <span className="desktop-seek-played" style={{ width: `${pct}%` }} />
         </div>
-        <input aria-label="播放进度" type="range" disabled={!seekEnabled} min={0} max={duration || 1} step={0.01} value={Math.min(time, duration || 0)}
-          onPointerDown={(e) => {
-            pointer.current = { x: e.clientX, moved: false };
-            const rect = e.currentTarget.getBoundingClientRect();
-            const target = rect.width ? Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width)) * duration : undefined;
-            onSeekInteraction?.("down", "pointer", Number(e.currentTarget.value), target);
-          }}
-          onPointerMove={(e) => { if (pointer.current && Math.abs(e.clientX - pointer.current.x) > 3) pointer.current.moved = true; }}
-          onPointerUp={(e) => {
-            onSeekInteraction?.("up", pointer.current?.moved ? "drag" : "click", Number(e.currentTarget.value));
-            pointer.current = null;
-          }}
-          onPointerCancel={(e) => { onSeekInteraction?.("cancel", "pointer", Number(e.currentTarget.value)); pointer.current = null; }}
-          onBlur={() => { pointer.current = null; }}
-          onChange={(e) => {
-            const input = pointer.current ? (pointer.current.moved ? "drag" : "click") : "keyboard";
-            onSeekInteraction?.("change", input, Number(e.target.value));
-            onSeek(Number(e.target.value), `desktop_${input}`);
-          }} />
+        <input aria-label="播放进度" type="range" {...seek.inputProps} />
       </div>
 
       <div className="desktop-control-row">
@@ -84,7 +69,7 @@ export default function PlayerControls({
             <INext size={18} strokeWidth={1.7} />
           </button>
         )}
-        <span className="player-timecode"><span>{clock(time)}</span><span className="player-time-separator">/</span>{clock(duration)}</span>
+        <span className="player-timecode"><span>{clock(seek.time)}</span><span className="player-time-separator">/</span>{clock(duration)}</span>
         <div className="player-control-spacer" />
         <div className="player-speed-slot">
           <button className={`player-control player-speed ${rate !== 1 ? "is-on" : ""}`} aria-label="倍速" aria-expanded={speedOpen}

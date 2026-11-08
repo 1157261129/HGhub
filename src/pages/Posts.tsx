@@ -123,7 +123,7 @@ export function PostDetail({ id, onBack, active = true }: { id: number; onBack: 
           <>
             <div className="relative w-full bg-black" style={{ height: "min(40vh, 360px)" }}>
               {play && post.video_url ? (
-                <Player src={post.video_url} poster={cover(post.cover)} autoPlay controls diagnosticContext={{ video_id: id, active }} className="w-full h-full" />
+                <Player src={post.video_url} poster={cover(post.cover)} autoPlay active={active} controls diagnosticContext={{ video_id: id, active }} className="w-full h-full" />
               ) : (
                 <button onClick={() => { if (post.video_url) setPlay(true); else toast("该帖子没有视频", "info"); }} className="absolute inset-0">
                   <Img src={post.cover} eager />
