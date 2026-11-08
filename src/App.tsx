@@ -129,7 +129,7 @@ function AppBody() {
       <div ref={mainRef} className="relative flex-1 min-w-0 overflow-hidden win-main">
         <div className={vis("home")}><Home active={pageActive && tab === "home"} bottomInset={bottomInset} /></div>
         <div className={vis("search")}><Search active={pageActive && tab === "search"} wide={wide} /></div>
-        <div className={vis("category")}><Category wide={wide} /></div>
+        <div className={vis("category")}><Category wide={wide} active={pageActive && tab === "category"} /></div>
         <div className={vis("profile")}><Profile wide={wide} /></div>
 
         {stack.map((p, i) => (
@@ -201,7 +201,7 @@ function ShellInner({ collapsed, theater }: { collapsed: boolean; theater: boole
       <div ref={mainRef} className={`relative flex-1 min-w-0 overflow-hidden win-main ${theater ? "is-theater-main" : ""}`}>
         <div className={vis("home")}><Home active={pageActive && tab === "home"} bottomInset={14} /></div>
         <div className={vis("search")}><Search active={pageActive && tab === "search"} wide={wide} /></div>
-        <div className={vis("category")}><Category wide={wide} /></div>
+        <div className={vis("category")}><Category wide={wide} active={pageActive && tab === "category"} /></div>
         <div className={vis("profile")}><Profile wide={wide} /></div>
         {stack.map((p, i) => (
           <div key={p.key} className="absolute inset-0 z-30 bg-bg win-page-in" style={{ boxShadow: "-18px 0 40px rgba(0,0,0,.5)" }}>
