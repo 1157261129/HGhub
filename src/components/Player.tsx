@@ -148,6 +148,7 @@ export default function Player({
         ref={videoRef}
         poster={poster}
         playsInline
+        muted={muted}
         loop={loop}
         className="w-full h-full object-contain bg-black"
         onClick={toggle}
@@ -189,7 +190,7 @@ export default function Player({
             <button onClick={toggle} aria-label={playing ? "暂停" : "播放"} className="pressable">
               {playing ? <IPauseF size={16} /> : <IPlayF size={16} />}
             </button>
-            <button onClick={() => onToggleMute?.()} aria-label="静音" className="pressable">
+            <button onClick={() => onToggleMute?.()} aria-label={muted ? "取消静音" : "静音"} className="pressable">
               {muted ? <IVolMute size={16} /> : <IVol size={16} />}
             </button>
             <span className="text-[11px] tabular-nums text-white/85">{fmtTime(seek.time)} / {fmtTime(duration)}</span>
