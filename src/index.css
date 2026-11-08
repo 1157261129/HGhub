@@ -173,6 +173,7 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
 
 /* ——— Windows 无边框窗口 ——— */
 .win-root { background: var(--p-canvas); }
+/* height 改动时同步 src-tauri/src/macos_titlebar.rs 的 TITLEBAR_HEIGHT（macOS 红绿灯据此垂直居中） */
 .win-titlebar {
   height: 44px; display: flex; align-items: center; gap: 6px; padding: 0 8px 0 14px;
   background: var(--p-bg); user-select: none;

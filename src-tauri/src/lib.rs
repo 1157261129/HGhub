@@ -1,6 +1,8 @@
 mod api;
 mod lines;
 mod logging;
+#[cfg(target_os = "macos")]
+mod macos_titlebar;
 mod media;
 mod net;
 mod network_policy;
@@ -59,6 +61,9 @@ pub fn run() {
                 let state: tauri::State<Api> = app.state();
                 state.session.bind(dir);
             }
+            // macOS 主窗口在此创建：先按系统红绿灯尺寸算出居中位置（见 macos_titlebar.rs）
+            #[cfg(target_os = "macos")]
+            macos_titlebar::create_main_window(app)?;
             Ok(())
         })
         .plugin(
