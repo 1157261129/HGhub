@@ -352,6 +352,12 @@ input[type="range"].hg-range::-webkit-slider-thumb { -webkit-appearance: none; w
   transition: opacity .25s;
 }
 .desktop-controls.is-hidden { opacity: 0; pointer-events: none; }
+.playback-unlock { color: rgba(255,255,255,.38); background: rgba(0,0,0,.12); transition: color .2s, background .2s; }
+.playback-unlock:hover, .playback-unlock:focus-visible { color: rgba(255,255,255,.9); background: rgba(0,0,0,.4); }
+.player-root.is-locked [inert] button,
+.player-root.is-locked .desktop-controls,
+.player-root.is-locked .desktop-video-meta,
+.player-root.is-locked .desktop-social { visibility: hidden; }
 .desktop-control-row { display: flex; align-items: center; gap: 5px; height: 38px; }
 .player-control {
   height: 32px; min-width: 32px; padding: 0 8px; border-radius: 7px;
