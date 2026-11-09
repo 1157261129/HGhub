@@ -289,7 +289,8 @@ fn segment_response(
                 200,
                 "application/vnd.apple.mpegurl",
                 rewrite_playlist(target, text, origin).into_bytes(),
-                "no-store",
+                // Rewriting nested URIs does not require disabling the upstream cache policy.
+                "public, max-age=3600",
             ),
             Err(_) => respond(
                 502,
@@ -322,7 +323,18 @@ pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> 
         return respond(400, "text/plain", b"missing u".to_vec(), "no-store");
     }
 
-    match path {
+    let started = std::time::Instant::now();
+    let route = match path {
+        "/img" => "image",
+        "/hls" => "playlist",
+        "/seg" => "segment_or_key",
+        _ => "unknown",
+    };
+    crate::playback_log::record(
+        "proxy.begin",
+        serde_json::json!({"route": route, "resource": crate::playback_log::resource_id(&target)}),
+    );
+    let response = match path {
         "/img" => match load_image(&target).await {
             Ok((kind, bytes)) => {
                 respond(200, &kind, bytes.as_ref().clone(), "public, max-age=86400")
@@ -343,7 +355,12 @@ pub async fn handle(path: &str, query: &str, origin: &str) -> Response<Vec<u8>> 
             Err(e) => respond(502, "text/plain", e.into_bytes(), "no-store"),
         },
         _ => respond(404, "text/plain", b"not found".to_vec(), "no-store"),
-    }
+    };
+    crate::playback_log::record(
+        "proxy.end",
+        serde_json::json!({"route": route, "resource": crate::playback_log::resource_id(&target), "status": response.status().as_u16(), "bytes": response.body().len(), "elapsed_ms": started.elapsed().as_millis() as u64}),
+    );
+    response
 }
 
 #[cfg(test)]

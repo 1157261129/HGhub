@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
 import { fmtTime, playlist } from "../api";
+import { mediaResource, observeHls, usePlayerDiagnostics } from "../playbackDiagnostics";
+import { usePlaybackActivity } from "../usePlaybackActivity";
+import { useSeekInput } from "../useSeekInput";
 import { ICompress, IExpand, IPauseF, IPlayF, IVol, IVolMute } from "../icons";
 
 type Props = {
   src: string;              // 原始 m3u8 地址
   poster?: string;          // 已处理好的封面地址（本地协议）
   autoPlay?: boolean;
+  active?: boolean;
   muted?: boolean;
   loop?: boolean;
   onEnded?: () => void;
@@ -15,15 +19,18 @@ type Props = {
   onToggleMute?: () => void;
   controls?: boolean;
   className?: string;
+  diagnosticContext?: Record<string, unknown>;
 };
 
 export default function Player({
-  src, poster, autoPlay, muted = false, loop = false, onEnded, onPlaying,
-  onTogglePlay, onToggleMute, controls = true, className = "",
+  src, poster, autoPlay, active = true, muted = false, loop = false, onEnded, onPlaying,
+  onTogglePlay, onToggleMute, controls = true, className = "", diagnosticContext = {},
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const { trace, requestSeek } = usePlayerDiagnostics(videoRef, hlsRef, { view: "post_detail", ...diagnosticContext, active, resource: mediaResource(src) });
+  const activity = usePlaybackActivity(videoRef, hlsRef, { active, autoPlay: !!autoPlay, src, trace });
   const [playing, setPlaying] = useState(false);
   const [waiting, setWaiting] = useState(false);
   const [time, setTime] = useState(0);
@@ -31,11 +38,23 @@ export default function Player({
   const [full, setFull] = useState(false);
   const [rate, setRate] = useState(1);
   const [errMsg, setErrMsg] = useState<string>("");
+  const seek = useSeekInput({ time, duration, enabled: active, resetKey: src,
+    onInteraction: (phase, input, target, pointerTarget) => trace(`seek.input.${phase}`, { input, target, pointer_target: pointerTarget }),
+    onSeek: (target, input) => {
+      const video = videoRef.current;
+      if (!video || !activity.isActive()) return;
+      requestSeek(target, `legacy_${input}`);
+      video.currentTime = target;
+      trace("seek.assigned", { target });
+      setTime(video.currentTime);
+    },
+  });
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !src) return;
     const url = playlist(src);
+    trace("source.load", { engine: Hls.isSupported() ? "hls.js" : "native", auto_play: autoPlay });
 
     if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
 
@@ -46,6 +65,9 @@ export default function Player({
         contentSteeringController: undefined,
         enableInterstitialPlayback: false,
         enableWorker: true,
+        // Keep the same macOS seek workaround as the shared player.
+        preferManagedMediaSource: false,
+        autoStartLoad: false,
         lowLatencyMode: false,
         maxBufferLength: 24,
         backBufferLength: 30,
@@ -54,16 +76,19 @@ export default function Player({
         fragLoadingMaxRetry: 4,
       });
       hlsRef.current = hls;
+      observeHls(hls, trace);
       hls.loadSource(url);
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (autoPlay) video.play().catch(() => setPlaying(false));
+        if (activity.isActive()) hls.startLoad();
+        if (autoPlay) activity.play("manifest_autoplay", true);
       });
       hls.on(Hls.Events.ERROR, (_e, data) => {
         if (!data.fatal) return;
         const detail = `${data.type}/${data.details}/${data.response?.code ?? ""}/${String(data.reason ?? "").slice(0, 80)}`;
         (window as unknown as { __hlsErr?: string }).__hlsErr = detail;
         setErrMsg(detail);
+        if (!activity.isActive()) return;
         if (data.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
         else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
         else { hls.destroy(); hlsRef.current = null; }
@@ -71,10 +96,11 @@ export default function Player({
     } else {
       // Safari / 部分 WebView 原生支持 HLS
       video.src = url;
-      if (autoPlay) video.play().catch(() => setPlaying(false));
+      if (autoPlay) activity.play("native_autoplay", true);
     }
 
     return () => {
+      trace("source.cleanup");
       if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
     };
   }, [src, autoPlay]);
@@ -94,16 +120,9 @@ export default function Player({
   const toggle = () => {
     const video = videoRef.current;
     if (!video) return;
-    if (video.paused) video.play().catch(() => {});
-    else video.pause();
-  };
-
-  const onSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const video = videoRef.current;
-    if (!video || !duration) return;
-    const pct = Number(e.target.value) / 1000;
-    video.currentTime = pct * duration;
-    setTime(video.currentTime);
+    trace("toggle.request");
+    if (video.paused) activity.play("toggle");
+    else activity.pause("toggle");
   };
 
   const cycleRate = () => {
@@ -121,7 +140,7 @@ export default function Player({
     else el.requestFullscreen().catch(() => {});
   };
 
-  const pct = duration > 0 ? (time / duration) * 100 : 0;
+  const pct = duration > 0 ? (seek.time / duration) * 100 : 0;
 
   return (
     <div ref={wrapRef} className={`relative bg-black overflow-hidden group ${className}`}>
@@ -129,16 +148,17 @@ export default function Player({
         ref={videoRef}
         poster={poster}
         playsInline
+        muted={muted}
         loop={loop}
         className="w-full h-full object-contain bg-black"
         onClick={toggle}
-        onPlay={() => { setPlaying(true); onTogglePlay?.(true); }}
+        onPlay={() => { if (activity.isActive()) { setPlaying(true); onTogglePlay?.(true); } }}
         onPause={() => { setPlaying(false); onTogglePlay?.(false); }}
         onWaiting={() => setWaiting(true)}
-        onPlaying={() => { setWaiting(false); onPlaying?.(); }}
+        onPlaying={() => { if (activity.isActive()) { setWaiting(false); onPlaying?.(); } }}
         onTimeUpdate={(e) => setTime((e.target as HTMLVideoElement).currentTime)}
         onLoadedMetadata={(e) => setDuration((e.target as HTMLVideoElement).duration || 0)}
-        onEnded={() => onEnded?.()}
+        onEnded={() => { if (activity.isActive()) onEnded?.(); }}
       />
 
       {errMsg && (
@@ -164,16 +184,16 @@ export default function Player({
 
       {controls && (
         <div className="absolute inset-x-0 bottom-0 px-3 pb-2 pt-8 bg-gradient-to-t from-black/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
-          <input type="range" min={0} max={1000} value={Math.round(pct * 10)} onChange={onSeek}
-            className="hg-range w-full" style={{ "--fill": `${pct}%` } as React.CSSProperties} />
+          <input aria-label="播放进度" type="range" {...seek.inputProps}
+            className="hg-range w-full" style={{ ...seek.inputProps.style, "--fill": `${pct}%` } as React.CSSProperties} />
           <div className="flex items-center gap-3 mt-1 text-white">
             <button onClick={toggle} aria-label={playing ? "暂停" : "播放"} className="pressable">
               {playing ? <IPauseF size={16} /> : <IPlayF size={16} />}
             </button>
-            <button onClick={() => onToggleMute?.()} aria-label="静音" className="pressable">
+            <button onClick={() => onToggleMute?.()} aria-label={muted ? "取消静音" : "静音"} className="pressable">
               {muted ? <IVolMute size={16} /> : <IVol size={16} />}
             </button>
-            <span className="text-[11px] tabular-nums text-white/85">{fmtTime(time)} / {fmtTime(duration)}</span>
+            <span className="text-[11px] tabular-nums text-white/85">{fmtTime(seek.time)} / {fmtTime(duration)}</span>
             <div className="flex-1" />
             <button onClick={cycleRate} className="text-[11px] font-bold text-white/85 pressable tabular-nums">{rate}x</button>
             <button onClick={toggleFull} aria-label="全屏" className="pressable">
