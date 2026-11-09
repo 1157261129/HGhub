@@ -140,6 +140,7 @@ pub fn run() {
             api::line_probe,
             api::check_update,
             api::open_url,
+            api::set_orientation,
             api::api_login,
             api::api_register,
             api::api_logout,
