@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    huangguo_client_lib:run()
+    huangguo_client_lib::run()
 }
