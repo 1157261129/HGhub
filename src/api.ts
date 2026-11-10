@@ -9,9 +9,12 @@ import type {
 export const APP_VERSION = __APP_VERSION__;
 
 const ua = navigator.userAgent;
-export const isAndroid = /Android/i.test(ua);
 /** iPhone 的 UA 也带「like Mac OS X」，必须先于 macOS 判断；iPadOS 默认伪装成 Mac，用触点数区分。 */
-export const isIos = /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+export const isIos =
+  /iPhone|iPad|iPod/i.test(ua) ||
+  (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ||
+  (typeof navigator.platform === "string" && navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+export const isAndroid = /Android/i.test(ua);
 export const isMacos = !isIos && /Macintosh|Mac OS X/i.test(ua);
 export const isLinux = !isAndroid && !isIos && /Linux/i.test(ua);
 export const platform: "android" | "ios" | "windows" | "macos" | "linux" =
