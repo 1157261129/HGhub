@@ -34,13 +34,17 @@ fi
 
 # Tauri generates lowercase debug/release configurations. Using Release
 # silently selected debug in the original workflow.
+XCODE_TOOLCHAIN="$(xcode-select -p)/Toolchains/XcodeDefault.xctoolchain"
+test -d "$XCODE_TOOLCHAIN/usr/lib/swift/iphoneos"
 xcodebuild build \
+  -toolchain com.apple.dt.toolchain.XcodeDefault \
   -project src-tauri/gen/apple/huangguo-client.xcodeproj \
   -scheme huangguo-client_iOS \
   -configuration release \
   -sdk iphoneos \
   -destination 'generic/platform=iOS' \
   -derivedDataPath "$ROOT/build_output" \
+  TOOLCHAIN_DIR="$XCODE_TOOLCHAIN" \
   CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
 
 APP="$ROOT/build_output/Build/Products/release-iphoneos/HGhub.app"
